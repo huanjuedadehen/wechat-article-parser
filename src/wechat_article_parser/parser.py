@@ -76,6 +76,22 @@ def _normalize_image_url(url: str) -> str:
     return url
 
 
+def _extract_picture_cdn_urls(script_text: str) -> list[str]:
+    """从 picture_page_info_list 中只提取正文图片的 cdn_url，排除 watermark_info 和 share_cover 中的。"""
+    urls: list[str] = []
+    seen: set[str] = set()
+    for m in re.finditer(r"(watermark_info|share_cover)?\s*(?::\s*\{[^}]*?)?\bcdn_url:\s*'([^']*)'", script_text):
+        prefix = m.group(1)
+        url = m.group(2)
+        if prefix or not url:
+            continue
+        normalized = _normalize_image_url(url)
+        if normalized not in seen:
+            seen.add(normalized)
+            urls.append(normalized)
+    return urls
+
+
 # ---------------------------------------------------------------------------
 # 内部提取函数
 # ---------------------------------------------------------------------------
@@ -202,6 +218,7 @@ def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
 def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None:
     """将 rich_media_content 区块转换为 Markdown。"""
     soup = BeautifulSoup(content_tag.prettify(), "html.parser")
+    seen: set[str] = set()
 
     # 处理 <img> 标签
     to_remove = []
@@ -210,13 +227,16 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
         if src and src.startswith("http"):
             normalized = _normalize_image_url(src)
             img["src"] = normalized
-            result.images.append(normalized)
+            if normalized not in seen:
+                seen.add(normalized)
+                result.images.append(normalized)
         else:
             to_remove.append(img)
     for tag in to_remove:
         tag.decompose()
 
     # 处理含有 background-image 的 <svg> 标签
+    # 这些通常是装饰性元素（分隔线、底纹等），转为 <img> 用于 Markdown 渲染，但不计入 images 列表
     to_remove = []
     for svg in soup.find_all("svg"):
         style = svg.get("style", "")
@@ -226,7 +246,6 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
                 normalized = _normalize_image_url(m.group(1))
                 new_img = soup.new_tag("img", src=normalized)
                 svg.replace_with(new_img)
-                result.images.append(normalized)
                 continue
         to_remove.append(svg)
     for tag in to_remove:
@@ -278,9 +297,7 @@ def _extract_swiper_content(soup: BeautifulSoup, result: ArticleResult) -> None:
         if "window.picture_page_info_list =" not in script.text:
             continue
 
-        images = re.findall(r"cdn_url:\s*'([^']+)'", script.text)
-        for img_url in images:
-            result.images.append(_normalize_image_url(img_url))
+        result.images = _extract_picture_cdn_urls(script.text)
 
         html_parts = [f'<img src="{img}" /><br>' for img in result.images]
 
@@ -306,11 +323,9 @@ def _extract_fullscreen_content(soup: BeautifulSoup, result: ArticleResult) -> N
         html_parts: list[str] = []
 
         # 从 picture_page_info_list 中提取图片
-        images = re.findall(r"cdn_url:\s*'([^']+)'", script.text)
-        for img_url in images:
-            normalized = _normalize_image_url(img_url)
-            result.images.append(normalized)
-            html_parts.append(f'<img src="{normalized}" /><br>')
+        result.images = _extract_picture_cdn_urls(script.text)
+        for img in result.images:
+            html_parts.append(f'<img src="{img}" /><br>')
 
         # 从 text_page_info.content_noencode 或 content 中提取文本
         for field in ("content_noencode", "content"):
