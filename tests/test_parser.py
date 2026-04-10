@@ -10,6 +10,7 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/9NjneDOJiteXBM9Cupb9Ig",
     "https://mp.weixin.qq.com/s/0Wz3JeMbtWBL5iWJgYPS_Q",
     "https://mp.weixin.qq.com/s/DmZXjgIzq5gBo3H-YtcjVw",
+    "https://mp.weixin.qq.com/s/80bysSCadvy9VbaovXBv2g",
 ]
 
 
@@ -41,15 +42,31 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     print(f"公众号ID:     {result.mp_id}")
     print(f"公众号名称:   {result.mp_name}")
     print(f"公众号别名:   {result.mp_alias}")
-    print(f"公众号图片:   {result.mp_image[:80]}..." if result.mp_image else "公众号图片:   (empty)")
-    print(f"公众号简介:   {result.mp_description[:80]}" if result.mp_description else "公众号简介:   (empty)")
+    print(
+        f"公众号图片:   {result.mp_image[:80]}..."
+        if result.mp_image
+        else "公众号图片:   (empty)"
+    )
+    print(
+        f"公众号简介:   {result.mp_description[:80]}"
+        if result.mp_description
+        else "公众号简介:   (empty)"
+    )
     print(f"文章ID:       {result.article_id}")
     print(f"群发消息ID:   {result.article_msg_id}")
     print(f"文章idx:      {result.article_idx}")
     print(f"文章签名:     {result.article_sn}")
     print(f"文章标题:     {result.article_title}")
-    print(f"封面图:       {result.article_cover_image[:80]}..." if result.article_cover_image else "封面图:       (empty)")
-    print(f"文章摘要:     {result.article_description[:80]}" if result.article_description else "文章摘要:     (empty)")
+    print(
+        f"封面图:       {result.article_cover_image[:80]}..."
+        if result.article_cover_image
+        else "封面图:       (empty)"
+    )
+    print(
+        f"文章摘要:     {result.article_description[:80]}"
+        if result.article_description
+        else "文章摘要:     (empty)"
+    )
     print(f"发布时间:     {result.article_publish_time}")
     print(f"Markdown长度: {len(result.article_markdown)}")
     print(f"Markdown预览: {result.article_markdown[:200]}")
