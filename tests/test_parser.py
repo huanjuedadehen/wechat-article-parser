@@ -90,6 +90,9 @@ def test_fetch_all(url: str) -> None:
     print(f"封面图:       {result.article_cover_image}")
     print(f"文章摘要:     {result.article_description}")
     print(f"发布时间:     {result.article_publish_time}")
+    print(f"图片列表({len(result.images)}张):")
+    for i, img in enumerate(result.images, 1):
+        print(f"  {i}. {img}")
     print(f"Markdown内容:\n{result.article_markdown}")
     print(f"有效性:       {result.is_valid}")
     print(f"{'='*60}")
