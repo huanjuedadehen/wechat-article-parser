@@ -236,18 +236,37 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
         tag.decompose()
 
     # 处理含有 background-image 的 <svg> 标签
-    # 这些通常是装饰性元素（分隔线、底纹等），转为 <img> 用于 Markdown 渲染，但不计入 images 列表
+    # 部分文章用嵌套 SVG（外层 SVG > foreignobject > 内层 SVG）承载正文图片，
+    # 需从外向内收集所有图片 URL，一次性替换为多个 <img> 标签
     to_remove = []
-    for svg in soup.find_all("svg"):
-        style = svg.get("style", "")
-        if "background-image" in style:
-            m = re.search(r'url\("([^"]+)"\)', style)
-            if m:
-                normalized = _normalize_image_url(m.group(1))
-                new_img = soup.new_tag("img", src=normalized)
-                svg.replace_with(new_img)
+    for svg in soup.find_all("svg", recursive=True):
+        # 跳过已被外层 SVG 处理过的嵌套 SVG（已脱离文档树）
+        if not svg.parent:
+            continue
+        # 跳过嵌套在其他 SVG 内的 SVG，由外层统一处理
+        if svg.find_parent("svg"):
+            continue
+
+        # 收集本 SVG 及所有后代 SVG 中的 background-image 图片
+        all_svgs = [svg] + svg.find_all("svg")
+        img_tags = []
+        for s in all_svgs:
+            style = s.get("style", "")
+            if "background-image" not in style:
                 continue
-        to_remove.append(svg)
+            m = re.search(r'url\("([^"]+)"\)', style)
+            if not m:
+                continue
+            normalized = _normalize_image_url(m.group(1))
+            img_tags.append(soup.new_tag("img", src=normalized))
+            if normalized not in seen:
+                seen.add(normalized)
+                result.images.append(normalized)
+
+        if img_tags:
+            svg.replace_with(*img_tags)
+        else:
+            to_remove.append(svg)
     for tag in to_remove:
         tag.decompose()
 
