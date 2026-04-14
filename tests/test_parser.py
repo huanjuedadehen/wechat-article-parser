@@ -11,6 +11,7 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/0Wz3JeMbtWBL5iWJgYPS_Q",
     "https://mp.weixin.qq.com/s/DmZXjgIzq5gBo3H-YtcjVw",
     "https://mp.weixin.qq.com/s/80bysSCadvy9VbaovXBv2g",
+    "https://mp.weixin.qq.com/s/sfwGsafriO9sm6PfbQVXhw",
 ]
 
 
