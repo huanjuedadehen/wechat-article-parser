@@ -12,6 +12,8 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/DmZXjgIzq5gBo3H-YtcjVw",
     "https://mp.weixin.qq.com/s/80bysSCadvy9VbaovXBv2g",
     "https://mp.weixin.qq.com/s/sfwGsafriO9sm6PfbQVXhw",
+    "https://mp.weixin.qq.com/s/h8E6riExCaH2Znmnprj-WQ",
+    "https://mp.weixin.qq.com/s/ySQdtsRlRmAl_skdc5HQ-A",
 ]
 
 
@@ -43,6 +45,7 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     print(f"公众号ID:     {result.mp_id}")
     print(f"公众号名称:   {result.mp_name}")
     print(f"公众号别名:   {result.mp_alias}")
+    print(f"账号类型:     {result.mp_account_type}")
     print(
         f"公众号图片:   {result.mp_image[:80]}..."
         if result.mp_image
@@ -98,6 +101,7 @@ def test_fetch_all(url: str) -> None:
     print(f"公众号ID:     {result.mp_id}")
     print(f"公众号名称:   {result.mp_name}")
     print(f"公众号别名:   {result.mp_alias}")
+    print(f"账号类型:     {result.mp_account_type}")
     print(f"公众号图片:   {result.mp_image}")
     print(f"公众号简介:   {result.mp_description}")
     print(f"文章ID:       {result.article_id}")

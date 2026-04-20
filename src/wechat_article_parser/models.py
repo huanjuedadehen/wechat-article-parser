@@ -1,10 +1,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 
 
 class WeChatVerifyError(Exception):
     """微信返回了验证码/人机验证页面，而非文章内容时抛出此异常。"""
+
+
+class AccountType(str, Enum):
+    """公众号账号类型。继承自 str，既可按枚举比较也可按字符串比较。"""
+
+    UNKNOWN = ""
+    SUBSCRIPTION = "订阅号"
+    SERVICE = "服务号"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __format__(self, format_spec: str) -> str:
+        return format(self.value, format_spec)
 
 
 @dataclass
@@ -18,6 +33,7 @@ class ArticleResult:
     mp_alias: str = ""
     mp_image: str = ""
     mp_description: str = ""
+    mp_account_type: AccountType = AccountType.UNKNOWN
 
     # 文章信息
     article_id: str = ""

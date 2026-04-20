@@ -11,7 +11,7 @@ import httpx
 from bs4 import BeautifulSoup, Tag
 from markdownify import MarkdownConverter
 
-from .models import ArticleResult, WeChatVerifyError
+from .models import AccountType, ArticleResult, WeChatVerifyError
 
 _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -76,6 +76,15 @@ def _normalize_image_url(url: str) -> str:
     return url
 
 
+def _service_type_to_account_type(value: str) -> AccountType:
+    """映射 WeChat new_service_type 到账号类型：0/1 → 订阅号，2 → 服务号。"""
+    if value in ("0", "1"):
+        return AccountType.SUBSCRIPTION
+    if value == "2":
+        return AccountType.SERVICE
+    return AccountType.UNKNOWN
+
+
 def _extract_picture_cdn_urls(script_text: str) -> list[str]:
     """从 picture_page_info_list 中只提取正文图片的 cdn_url，排除 watermark_info 和 share_cover 中的。"""
     urls: list[str] = []
@@ -120,8 +129,21 @@ def _extract_meta(soup: BeautifulSoup, result: ArticleResult) -> None:
             setattr(result, attr, value)
 
 
+def _extract_account_type(script_text: str, result: ArticleResult) -> None:
+    """从 new_service_type 中提取账号类型：0/1 → 订阅号，2 → 服务号。"""
+    if result.mp_account_type:
+        return
+    m = re.search(r"new_service_type:\s*'(\d+)'", script_text)
+    if m:
+        account_type = _service_type_to_account_type(m.group(1))
+        if account_type != AccountType.UNKNOWN:
+            result.mp_account_type = account_type
+
+
 def _extract_rich_text_meta(script_text: str, result: ArticleResult) -> None:
     """从富文本文章的 script 标签中提取元数据。"""
+    _extract_account_type(script_text, result)
+
     if "var hd_head_img" in script_text:
         m = re.search(r'var hd_head_img = "([^"]+)"', script_text)
         if m:
@@ -164,6 +186,8 @@ def _extract_rich_text_meta(script_text: str, result: ArticleResult) -> None:
 
 def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
     """从图片轮播 / 纯文本 / 视频分享页面的 script 标签中提取元数据。"""
+    _extract_account_type(script_text, result)
+
     if "window.__initCgiDataConfig =" in script_text:
         m = re.search(r"d\.hd_head_img.*?:\s*'([^']+)'", script_text)
         if m:
