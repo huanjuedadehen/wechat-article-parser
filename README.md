@@ -81,6 +81,7 @@ result = parse(
 | `mp_alias` | `str` | 公众号别名 |
 | `mp_image` | `str` | 公众号头像链接 |
 | `mp_description` | `str` | 公众号简介 |
+| `mp_account_type` | `AccountType` | 账号类型：`AccountType.SUBSCRIPTION`（订阅号）/ `AccountType.SERVICE`（服务号）/ `AccountType.UNKNOWN`（未识别） |
 | `article_id` | `str` | 文章 ID |
 | `article_msg_id` | `int` | 文章所在的群发消息 ID |
 | `article_idx` | `int` | 群发图文中的位置（从 1 开始） |
@@ -94,6 +95,27 @@ result = parse(
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
 
 `is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_id`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_markdown`、`article_publish_time` 均不为空/零。
+
+### 判断账号类型
+
+`AccountType` 继承自 `str` 枚举，既支持枚举比较，也支持与中文字符串直接比较：
+
+```python
+from wechat_article_parser import parse, AccountType
+
+result = parse("https://mp.weixin.qq.com/s/xxxxx")
+
+# 推荐：枚举比较（有类型提示与 IDE 补全）
+if result.mp_account_type == AccountType.SERVICE:
+    print("这是服务号")
+
+# 也支持：字符串字面量比较
+if result.mp_account_type == "服务号":
+    print("这是服务号")
+
+# 打印直接输出中文值
+print(f"账号类型: {result.mp_account_type}")  # 账号类型: 订阅号
+```
 
 ## 异常处理
 
