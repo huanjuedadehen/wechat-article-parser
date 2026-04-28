@@ -476,30 +476,50 @@ def _parse_html(url: str, html: str) -> ArticleResult:
 # 公开接口
 # ---------------------------------------------------------------------------
 
-def parse(url: str, *, timeout: int = _TIMEOUT, user_agent: str | None = None) -> ArticleResult:
+def parse(
+    url: str,
+    *,
+    timeout: int = _TIMEOUT,
+    user_agent: str | None = None,
+    proxy: str | None = None,
+) -> ArticleResult:
     """抓取并解析微信公众号文章（同步方式）。
 
     Args:
         url: 微信文章链接。
         timeout: 请求超时时间（秒）。
         user_agent: 自定义 User-Agent，不传则使用内置默认值。
+        proxy: HTTP/HTTPS 代理地址，例如 "http://user:pass@host:port"，不传则直连。
 
     Returns:
         包含解析数据的 ArticleResult。
     """
     ua = user_agent or _USER_AGENT
-    response = httpx.get(url, headers={"User-Agent": ua}, timeout=timeout, follow_redirects=True)
-    response.raise_for_status()
-    return _parse_html(url, response.text)
+    with httpx.Client(
+        headers={"User-Agent": ua},
+        timeout=timeout,
+        follow_redirects=True,
+        proxy=proxy,
+    ) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        return _parse_html(url, response.text)
 
 
-async def parse_async(url: str, *, timeout: int = _TIMEOUT, user_agent: str | None = None) -> ArticleResult:
+async def parse_async(
+    url: str,
+    *,
+    timeout: int = _TIMEOUT,
+    user_agent: str | None = None,
+    proxy: str | None = None,
+) -> ArticleResult:
     """抓取并解析微信公众号文章（异步方式）。
 
     Args:
         url: 微信文章链接。
         timeout: 请求超时时间（秒）。
         user_agent: 自定义 User-Agent，不传则使用内置默认值。
+        proxy: HTTP/HTTPS 代理地址，例如 "http://user:pass@host:port"，不传则直连。
 
     Returns:
         包含解析数据的 ArticleResult。
@@ -509,6 +529,7 @@ async def parse_async(url: str, *, timeout: int = _TIMEOUT, user_agent: str | No
         headers={"User-Agent": ua},
         timeout=timeout,
         follow_redirects=True,
+        proxy=proxy,
     ) as client:
         response = await client.get(url)
         response.raise_for_status()

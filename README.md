@@ -60,12 +60,14 @@ print(result.article_markdown)
 
 - `timeout`：请求超时时间，单位秒，默认 15
 - `user_agent`：自定义 User-Agent，不传则使用内置默认值
+- `proxy`：HTTP/HTTPS 代理地址，不传则直连
 
 ```python
 result = parse(
     "https://mp.weixin.qq.com/s/xxxxx",
     timeout=30,
     user_agent="MyBot/1.0",
+    proxy="http://user:pass@127.0.0.1:7890",
 )
 ```
 
@@ -187,4 +189,18 @@ pytest tests/test_parser.py::test_fetch_all -s --url "https://mp.weixin.qq.com/s
 
 ```bash
 pytest tests/test_parser.py::test_fetch_markdown -s --url "https://mp.weixin.qq.com/s/xxxxx"
+```
+
+### 通过 HTTP 代理运行测试
+
+所有测试命令都支持 `--proxy` 参数，传入后所有请求都会经由该代理；不传则直连。常用于 IP 被微信限流时换出口：
+
+```bash
+# 全量测试走代理
+pytest tests/test_parser.py -v -s --proxy "http://127.0.0.1:7890"
+
+# 测试单个链接走代理
+pytest tests/test_parser.py::test_fetch_all -s \
+  --url "https://mp.weixin.qq.com/s/xxxxx" \
+  --proxy "http://user:pass@127.0.0.1:7890"
 ```

@@ -18,9 +18,9 @@ TEST_URLS = [
 
 
 @pytest.mark.parametrize("url", TEST_URLS)
-def test_parse_sync(url: str) -> None:
+def test_parse_sync(url: str, proxy: str | None) -> None:
     try:
-        result = parse(url)
+        result = parse(url, proxy=proxy)
     except WeChatVerifyError:
         pytest.skip("WeChat returned verification page (IP rate-limited)")
         return
@@ -29,9 +29,9 @@ def test_parse_sync(url: str) -> None:
 
 @pytest.mark.parametrize("url", TEST_URLS)
 @pytest.mark.asyncio
-async def test_parse_async(url: str) -> None:
+async def test_parse_async(url: str, proxy: str | None) -> None:
     try:
-        result = await parse_async(url)
+        result = await parse_async(url, proxy=proxy)
     except WeChatVerifyError:
         pytest.skip("WeChat returned verification page (IP rate-limited)")
         return
@@ -89,12 +89,12 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     assert result.is_valid
 
 
-def test_fetch_all(url: str) -> None:
+def test_fetch_all(url: str, proxy: str | None) -> None:
     """抓取指定 URL 并打印所有采集到的参数。
 
-    用法: pytest tests/test_parser.py::test_fetch_all -s --url <URL>
+    用法: pytest tests/test_parser.py::test_fetch_all -s --url <URL> [--proxy <PROXY>]
     """
-    result = parse(url)
+    result = parse(url, proxy=proxy)
     print(f"\n{'='*60}")
     print(f"URL:          {url}")
     print(f"公众号ID(B64):{result.mp_id_b64}")
@@ -120,10 +120,10 @@ def test_fetch_all(url: str) -> None:
     print(f"{'='*60}")
 
 
-def test_fetch_markdown(url: str) -> None:
+def test_fetch_markdown(url: str, proxy: str | None) -> None:
     """抓取指定 URL 并只打印 Markdown 内容。
 
-    用法: pytest tests/test_parser.py::test_fetch_markdown -s --url <URL>
+    用法: pytest tests/test_parser.py::test_fetch_markdown -s --url <URL> [--proxy <PROXY>]
     """
-    result = parse(url)
+    result = parse(url, proxy=proxy)
     print(f"\n{result.article_markdown}")
