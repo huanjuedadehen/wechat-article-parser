@@ -127,3 +127,17 @@ def test_fetch_markdown(url: str, proxy: str | None) -> None:
     """
     result = parse(url, proxy=proxy)
     print(f"\n{result.article_markdown}")
+
+
+def test_fetch_raw_html(url: str, proxy: str | None) -> None:
+    """抓取指定 URL 并打印原始 HTML 网页源代码。
+
+    用法: pytest tests/test_parser.py::test_fetch_raw_html -s --url <URL> [--proxy <PROXY>]
+    """
+    result = parse(url, proxy=proxy, include_raw_html=True)
+    assert result.raw_html, "raw_html should not be empty when include_raw_html=True"
+    print(f"\n{'='*60}")
+    print(f"URL:        {url}")
+    print(f"raw_html长度: {len(result.raw_html)}")
+    print(f"{'='*60}")
+    print(result.raw_html)

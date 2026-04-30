@@ -61,6 +61,7 @@ print(result.article_markdown)
 - `timeout`：请求超时时间，单位秒，默认 15
 - `user_agent`：自定义 User-Agent，不传则使用内置默认值
 - `proxy`：HTTP/HTTPS 代理地址，不传则直连
+- `include_raw_html`：是否在返回结果中带上原始 HTML 网页源代码，默认 `False`
 
 ```python
 result = parse(
@@ -68,6 +69,7 @@ result = parse(
     timeout=30,
     user_agent="MyBot/1.0",
     proxy="http://user:pass@127.0.0.1:7890",
+    include_raw_html=True,
 )
 ```
 
@@ -93,6 +95,7 @@ result = parse(
 | `article_description` | `str` | 文章摘要 |
 | `article_markdown` | `str` | 文章正文的 Markdown 内容 |
 | `article_publish_time` | `int` | 发布时间（Unix 时间戳） |
+| `raw_html` | `str` | 原始 HTML 网页源代码（仅在 `include_raw_html=True` 时填充，否则为空字符串） |
 | `images` | `list[str]` | 文章中提取的所有图片链接 |
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
 
@@ -189,6 +192,12 @@ pytest tests/test_parser.py::test_fetch_all -s --url "https://mp.weixin.qq.com/s
 
 ```bash
 pytest tests/test_parser.py::test_fetch_markdown -s --url "https://mp.weixin.qq.com/s/xxxxx"
+```
+
+### 测试单个链接 - 打印原始 HTML 网页源代码
+
+```bash
+pytest tests/test_parser.py::test_fetch_raw_html -s --url "https://mp.weixin.qq.com/s/xxxxx"
 ```
 
 ### 通过 HTTP 代理运行测试

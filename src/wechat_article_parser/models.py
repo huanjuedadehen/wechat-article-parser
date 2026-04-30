@@ -46,6 +46,9 @@ class ArticleResult:
     article_markdown: str = ""
     article_publish_time: int = 0
 
+    # 原始 HTML 网页源代码（仅在调用方显式要求时才会填充）
+    raw_html: str = ""
+
     # 文章中提取的图片列表
     images: list[str] = field(default_factory=list)
 

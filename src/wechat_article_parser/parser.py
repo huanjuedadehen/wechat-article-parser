@@ -482,6 +482,7 @@ def parse(
     timeout: int = _TIMEOUT,
     user_agent: str | None = None,
     proxy: str | None = None,
+    include_raw_html: bool = False,
 ) -> ArticleResult:
     """抓取并解析微信公众号文章（同步方式）。
 
@@ -490,6 +491,7 @@ def parse(
         timeout: 请求超时时间（秒）。
         user_agent: 自定义 User-Agent，不传则使用内置默认值。
         proxy: HTTP/HTTPS 代理地址，例如 "http://user:pass@host:port"，不传则直连。
+        include_raw_html: 是否在结果中返回原始 HTML 网页源代码，默认不返回。
 
     Returns:
         包含解析数据的 ArticleResult。
@@ -503,7 +505,10 @@ def parse(
     ) as client:
         response = client.get(url)
         response.raise_for_status()
-        return _parse_html(url, response.text)
+        result = _parse_html(url, response.text)
+        if include_raw_html:
+            result.raw_html = response.text
+        return result
 
 
 async def parse_async(
@@ -512,6 +517,7 @@ async def parse_async(
     timeout: int = _TIMEOUT,
     user_agent: str | None = None,
     proxy: str | None = None,
+    include_raw_html: bool = False,
 ) -> ArticleResult:
     """抓取并解析微信公众号文章（异步方式）。
 
@@ -520,6 +526,7 @@ async def parse_async(
         timeout: 请求超时时间（秒）。
         user_agent: 自定义 User-Agent，不传则使用内置默认值。
         proxy: HTTP/HTTPS 代理地址，例如 "http://user:pass@host:port"，不传则直连。
+        include_raw_html: 是否在结果中返回原始 HTML 网页源代码，默认不返回。
 
     Returns:
         包含解析数据的 ArticleResult。
@@ -533,4 +540,7 @@ async def parse_async(
     ) as client:
         response = await client.get(url)
         response.raise_for_status()
-        return _parse_html(url, response.text)
+        result = _parse_html(url, response.text)
+        if include_raw_html:
+            result.raw_html = response.text
+        return result
