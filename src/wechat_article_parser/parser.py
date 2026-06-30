@@ -38,6 +38,15 @@ def _to_markdown(html: str) -> str:
     return _MarkdownConverter().convert(html)
 
 
+def _to_markdown_plain(html: str) -> str:
+    """用于纯文本类内容（纯文本/转载/视频/轮播/全屏）的转换。
+
+    这些内容由 <br> 承载换行，必须保留；故使用未覆写 convert_p 的基础转换器，
+    避免 _MarkdownConverter 折叠空白时把换行一并吞掉。
+    """
+    return MarkdownConverter().convert(html)
+
+
 # ---------------------------------------------------------------------------
 # 文本解码辅助函数
 # ---------------------------------------------------------------------------
@@ -317,7 +326,7 @@ def _extract_repost_content(content_tag: Tag, result: ArticleResult) -> None:
         if href:
             html_content += f'<p><a href="{href}">查看原文</a></p>'
 
-    result.article_markdown = _to_markdown(html_content)
+    result.article_markdown = _to_markdown_plain(html_content)
 
 
 def _extract_plain_text_content(soup: BeautifulSoup, result: ArticleResult) -> None:
@@ -331,7 +340,7 @@ def _extract_plain_text_content(soup: BeautifulSoup, result: ArticleResult) -> N
             if m:
                 text = _decode_text(m.group(1), preserve_newlines=True)
                 text = unquote(text)
-                result.article_markdown = _to_markdown(f"<p>{text}</p>")
+                result.article_markdown = _to_markdown_plain(f"<p>{text}</p>")
 
 
 def _extract_swiper_content(soup: BeautifulSoup, result: ArticleResult) -> None:
@@ -350,7 +359,7 @@ def _extract_swiper_content(soup: BeautifulSoup, result: ArticleResult) -> None:
             html_parts.append(f"<p>{text}</p>")
 
         if html_parts:
-            result.article_markdown = _to_markdown("".join(html_parts))
+            result.article_markdown = _to_markdown_plain("".join(html_parts))
 
 
 def _extract_fullscreen_content(soup: BeautifulSoup, result: ArticleResult) -> None:
@@ -371,9 +380,10 @@ def _extract_fullscreen_content(soup: BeautifulSoup, result: ArticleResult) -> N
             html_parts.append(f'<img src="{img}" /><br>')
 
         # 从 text_page_info.content_noencode 或 content 中提取文本
+        # 文本可能被 JsDecode('...') 包裹，也可能是裸的单引号字符串，两种都要兼容
         for field in ("content_noencode", "content"):
             m = re.search(
-                rf"{field}:\s*JsDecode\('(.*?)'\)",
+                rf"{field}:\s*(?:JsDecode\(\s*)?'(.*?)'",
                 script.text,
                 re.DOTALL,
             )
@@ -384,7 +394,7 @@ def _extract_fullscreen_content(soup: BeautifulSoup, result: ArticleResult) -> N
                 break
 
         if html_parts:
-            result.article_markdown = _to_markdown("".join(html_parts))
+            result.article_markdown = _to_markdown_plain("".join(html_parts))
         return
 
 
