@@ -20,6 +20,13 @@ _USER_AGENT = (
 )
 _TIMEOUT = 15
 
+# 将字符串和注释作为整体，避免其中的括号干扰图片数组的层级判断。
+_JS_DATA_TOKEN_RE = re.compile(
+    r"(?P<string>'(?:\\[\s\S]|[^'\\])*'|\"(?:\\[\s\S]|[^\"\\])*\"|`(?:\\[\s\S]|[^`\\])*`)"
+    r"|(?P<comment>//[^\r\n]*|/\*[\s\S]*?\*/)"
+    r"|[a-zA-Z_$][\w$]*|[^\s]"
+)
+
 
 # ---------------------------------------------------------------------------
 # Markdown 转换器
@@ -95,18 +102,59 @@ def _service_type_to_account_type(value: str) -> AccountType:
 
 
 def _extract_picture_cdn_urls(script_text: str) -> list[str]:
-    """从 picture_page_info_list 中只提取正文图片的 cdn_url，排除 watermark_info 和 share_cover 中的。"""
+    """读取图片数组条目的直接 cdn_url，排除数组外和嵌套对象中的地址。
+
+    支持 window.picture_page_info_list = [...] 和 cgiDataNew 中的同名属性。
+    页面数据是含表达式的 JS 对象字面量，因此只跟踪结构，不执行脚本。
+    """
+    if "picture_page_info_list" not in script_text:
+        return []
+
     urls: list[str] = []
     seen: set[str] = set()
-    for m in re.finditer(r"(watermark_info|share_cover)?\s*(?::\s*\{[^}]*?)?\bcdn_url:\s*'([^']*)'", script_text):
-        prefix = m.group(1)
-        url = m.group(2)
-        if prefix or not url:
+    stack: list[str] = []
+    array_urls: list[str] = []
+    previous = before_previous = ""
+    for match in _JS_DATA_TOKEN_RE.finditer(script_text):
+        if match.lastgroup == "comment":
             continue
-        normalized = _normalize_image_url(url)
-        if normalized not in seen:
-            seen.add(normalized)
-            urls.append(normalized)
+        token = match.group()
+        is_string = match.lastgroup == "string"
+
+        if not stack:
+            if (
+                token == "["
+                and previous in (":", "=")
+                and before_previous == "picture_page_info_list"
+            ):
+                stack.append(token)
+        elif token in ("[", "{"):
+            stack.append(token)
+        elif token in ("]", "}"):
+            if stack[-1] != {"]": "[", "}": "{"}[token]:
+                stack.clear()
+                array_urls.clear()
+            else:
+                stack.pop()
+                if not stack:
+                    # 只提交完整数组，保留图片顺序并去重。
+                    for url in array_urls:
+                        if url not in seen:
+                            seen.add(url)
+                            urls.append(url)
+                    array_urls.clear()
+        elif (
+            stack == ["[", "{"]
+            and before_previous == "cdn_url"
+            and previous == ":"
+            and is_string
+            and token[0] in ("'", '"')
+        ):
+            url = _decode_text(token[1:-1])
+            if url:
+                array_urls.append(_normalize_image_url(url))
+
+        before_previous, previous = previous, token[1:-1] if is_string else token
     return urls
 
 
@@ -345,21 +393,26 @@ def _extract_plain_text_content(soup: BeautifulSoup, result: ArticleResult) -> N
 
 def _extract_swiper_content(soup: BeautifulSoup, result: ArticleResult) -> None:
     """从小红书风格的图片轮播文章中提取内容。"""
+    images: list[str] = []
+    seen: set[str] = set()
+    description = ""
     for script in soup.find_all("script", attrs={"type": "text/javascript"}):
-        if "window.picture_page_info_list =" not in script.text:
-            continue
-
-        result.images = _extract_picture_cdn_urls(script.text)
-
-        html_parts = [f'<img src="{img}" /><br>' for img in result.images]
+        # 图片数据和 window.desc 可能位于不同的 script，分别收集。
+        for url in _extract_picture_cdn_urls(script.text):
+            if url not in seen:
+                seen.add(url)
+                images.append(url)
 
         m = re.search(r'window.desc = "([^"]+)"', script.text)
         if m:
-            text = _decode_text(m.group(1), preserve_newlines=True)
-            html_parts.append(f"<p>{text}</p>")
+            description = _decode_text(m.group(1), preserve_newlines=True)
 
-        if html_parts:
-            result.article_markdown = _to_markdown_plain("".join(html_parts))
+    result.images = images
+    html_parts = [f'<img src="{img}" /><br>' for img in images]
+    if description:
+        html_parts.append(f"<p>{description}</p>")
+    if html_parts:
+        result.article_markdown = _to_markdown_plain("".join(html_parts))
 
 
 def _extract_fullscreen_content(soup: BeautifulSoup, result: ArticleResult) -> None:
