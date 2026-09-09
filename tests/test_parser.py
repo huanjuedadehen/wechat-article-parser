@@ -63,7 +63,7 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     print(f"文章idx:      {result.article_idx}")
     print(f"文章签名:     {result.article_sn}")
     print(f"文章标题:     {result.article_title}")
-    print(f"展示类型:     {result.item_show_type}")
+    print(f"展示类型:     {result.article_display_type}")
     print(
         f"封面图:       {result.article_cover_image[:80]}..."
         if result.article_cover_image
@@ -87,7 +87,7 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     assert result.article_idx > 0, "article_idx should be positive"
     assert result.article_sn, "article_sn should not be empty"
     assert result.article_title, "article_title should not be empty"
-    if result.item_show_type != 5:
+    if result.article_display_type != "video":
         assert result.article_markdown, "article_markdown should not be empty for non-video articles"
     assert result.article_publish_time > 0, "article_publish_time should be positive"
     assert result.is_valid
@@ -113,7 +113,7 @@ def test_fetch_all(url: str, proxy: str | None) -> None:
     print(f"文章idx:      {result.article_idx}")
     print(f"文章签名:     {result.article_sn}")
     print(f"文章标题:     {result.article_title}")
-    print(f"展示类型:     {result.item_show_type}")
+    print(f"展示类型:     {result.article_display_type}")
     print(f"封面图:       {result.article_cover_image}")
     print(f"文章摘要:     {result.article_description}")
     print(f"发布时间:     {result.article_publish_time}")

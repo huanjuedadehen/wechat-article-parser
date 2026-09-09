@@ -1,10 +1,11 @@
 """按展示类型检查解析结果的有效性。"""
 
-from dataclasses import replace
+from dataclasses import asdict, replace
+import json
 
 import pytest
 
-from wechat_article_parser import ArticleResult
+from wechat_article_parser import ArticleDisplayType, ArticleResult
 
 
 _COMPLETE = ArticleResult(
@@ -19,16 +20,16 @@ _COMPLETE = ArticleResult(
 )
 
 
-@pytest.mark.parametrize("item_show_type", [None, 0, 5, 8, 10, 999])
+@pytest.mark.parametrize("display_type", list(ArticleDisplayType))
 @pytest.mark.parametrize("markdown", ["", "正文"])
 def test_only_video_can_be_valid_without_markdown(
-    item_show_type: int | None, markdown: str,
+    display_type: ArticleDisplayType, markdown: str,
 ) -> None:
     result = replace(
-        _COMPLETE, item_show_type=item_show_type, article_markdown=markdown,
+        _COMPLETE, article_display_type=display_type, article_markdown=markdown,
     )
 
-    assert result.is_valid is (bool(markdown) or item_show_type == 5)
+    assert result.is_valid is (bool(markdown) or display_type == ArticleDisplayType.VIDEO)
 
 
 @pytest.mark.parametrize(
@@ -50,9 +51,39 @@ def test_video_still_requires_all_key_metadata(
 ) -> None:
     result = replace(
         _COMPLETE,
-        item_show_type=5,
+        article_display_type=ArticleDisplayType.VIDEO,
         article_markdown=markdown,
         **{field_name: empty_value},
     )
 
+    assert not result.is_valid
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        "article",
+        "video",
+        "image",
+        "text",
+        "unknown",
+    ],
+)
+def test_display_type_has_semantic_string_values(expected: str) -> None:
+    result = ArticleResult(article_display_type=ArticleDisplayType(expected))
+
+    assert result.article_display_type is ArticleDisplayType(expected)
+    assert result.article_display_type == expected
+    assert str(result.article_display_type) == expected
+    assert f"{result.article_display_type:>10}" == f"{expected:>10}"
+    assert json.dumps(result.article_display_type) == json.dumps(expected)
+    serialized = json.loads(json.dumps(asdict(result)))
+    assert serialized["article_display_type"] == expected
+    assert "item_show_type" not in serialized
+    assert not hasattr(result, "item_show_type")
+
+
+def test_default_display_type_is_unknown() -> None:
+    result = ArticleResult()
+    assert result.article_display_type is ArticleDisplayType.UNKNOWN
     assert not result.is_valid

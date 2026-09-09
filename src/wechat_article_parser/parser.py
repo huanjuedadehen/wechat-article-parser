@@ -13,7 +13,7 @@ import httpx
 from bs4 import BeautifulSoup, Tag
 from markdownify import MarkdownConverter
 
-from .models import AccountType, ArticleResult, WeChatVerifyError
+from .models import AccountType, ArticleDisplayType, ArticleResult, WeChatVerifyError
 
 _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -504,6 +504,12 @@ _ITEM_SHOW_TYPE_BRANCHES = {
     8: ("swiper",),
     10: ("plain_text", "fullscreen"),
 }
+_ARTICLE_DISPLAY_TYPES = {
+    0: ArticleDisplayType.ARTICLE,
+    5: ArticleDisplayType.VIDEO,
+    8: ArticleDisplayType.IMAGE,
+    10: ArticleDisplayType.TEXT,
+}
 
 
 def _try_content_branch(
@@ -562,8 +568,11 @@ def _parse_html(url: str, html: str) -> ArticleResult:
 
     scripts = soup.find_all("script", attrs={"type": "text/javascript"})
 
-    result.item_show_type = _extract_item_show_type(scripts)
-    preferred = _ITEM_SHOW_TYPE_BRANCHES.get(result.item_show_type, ())
+    item_show_type = _extract_item_show_type(scripts)
+    result.article_display_type = _ARTICLE_DISPLAY_TYPES.get(
+        item_show_type, ArticleDisplayType.UNKNOWN,
+    )
+    preferred = _ITEM_SHOW_TYPE_BRANCHES.get(item_show_type, ())
     attempted: set[str] = set()
     for branch in (*preferred, *_CONTENT_SELECTORS):
         if branch in attempted:

@@ -99,12 +99,40 @@ result = parse(
 | `article_description` | `str` | 文章摘要 |
 | `article_markdown` | `str` | 文章正文的 Markdown 内容；视频分享没有文字附言时可为空 |
 | `article_publish_time` | `int` | 发布时间（Unix 时间戳） |
-| `item_show_type` | `int` / `None` | 页面展示类型：`0` 图文、`5` 视频分享、`8` 图片轮播、`10` 文字消息；未读取到时为 `None`，未知数值原样保留 |
+| `article_display_type` | `ArticleDisplayType` | 文章展示类型：`article`、`video`、`image`、`text` 或 `unknown` |
 | `raw_html` | `str` | 原始 HTML 网页源代码（仅在 `include_raw_html=True` 时填充，否则为空字符串） |
 | `images` | `list[str]` | 文章中提取的所有图片链接 |
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
 
-`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_id`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `item_show_type == 5`。视频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频文件。
+`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_id`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type == "video"`。视频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频文件。
+
+### 判断文章展示类型
+
+`ArticleDisplayType` 是字符串枚举，既支持枚举比较，也支持语义字符串比较：
+
+| 枚举 | 字符串值 | 含义 |
+|---|---|---|
+| `ArticleDisplayType.ARTICLE` | `article` | 图文，包括转载式 |
+| `ArticleDisplayType.VIDEO` | `video` | 视频分享 |
+| `ArticleDisplayType.IMAGE` | `image` | 图片轮播 |
+| `ArticleDisplayType.TEXT` | `text` | 文字消息 |
+| `ArticleDisplayType.UNKNOWN` | `unknown` | 页面类型缺失或未支持 |
+
+```python
+from wechat_article_parser import parse, ArticleDisplayType
+
+result = parse("https://mp.weixin.qq.com/s/xxxxx")
+if result.article_display_type == ArticleDisplayType.VIDEO:
+    print("这是视频分享")
+
+if result.article_display_type == "video":
+    print("视频分享可以没有文字正文")
+
+print(result.article_display_type)  # 例如 video
+```
+
+`article_display_type` 是返回结果中的数据字段，包含在 `dataclasses.asdict(result)` 中，JSON 序列化时输出语义字符串。
+微信原始的 `item_show_type` 仅在解析器内部使用，不包含在返回结果中。
 
 ### 判断账号类型
 

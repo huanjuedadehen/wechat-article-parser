@@ -22,6 +22,22 @@ class AccountType(str, Enum):
         return format(self.value, format_spec)
 
 
+class ArticleDisplayType(str, Enum):
+    """文章展示类型，支持枚举和语义字符串比较。"""
+
+    UNKNOWN = "unknown"
+    ARTICLE = "article"
+    VIDEO = "video"
+    IMAGE = "image"
+    TEXT = "text"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __format__(self, format_spec: str) -> str:
+        return format(self.value, format_spec)
+
+
 @dataclass
 class ArticleResult:
     """微信公众号文章的解析结果。"""
@@ -52,12 +68,12 @@ class ArticleResult:
     # 文章中提取的图片列表
     images: list[str] = field(default_factory=list)
 
-    # 页面展示类型，未读取到有效数值时为 None（0 是有效类型）
-    item_show_type: int | None = None
+    # 对外返回语义展示类型，微信原始数值仅在解析器内部使用。
+    article_display_type: ArticleDisplayType = ArticleDisplayType.UNKNOWN
 
     @property
     def is_valid(self) -> bool:
-        """检查关键字段是否解析成功；视频分享（类型 5）允许正文为空。"""
+        """检查关键字段是否解析成功；视频分享允许正文为空。"""
         return bool(
             self.mp_id
             and self.mp_name
@@ -66,6 +82,9 @@ class ArticleResult:
             and self.article_idx
             and self.article_sn
             and self.article_title
-            and (self.article_markdown or self.item_show_type == 5)
+            and (
+                self.article_markdown
+                or self.article_display_type == ArticleDisplayType.VIDEO
+            )
             and self.article_publish_time
         )
