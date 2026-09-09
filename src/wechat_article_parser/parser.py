@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import html as html_module
 import re
+from collections import deque
+from dataclasses import replace
 from urllib.parse import unquote
 
 import httpx
@@ -24,7 +26,7 @@ _TIMEOUT = 15
 _JS_DATA_TOKEN_RE = re.compile(
     r"(?P<string>'(?:\\[\s\S]|[^'\\])*'|\"(?:\\[\s\S]|[^\"\\])*\"|`(?:\\[\s\S]|[^`\\])*`)"
     r"|(?P<comment>//[^\r\n]*|/\*[\s\S]*?\*/)"
-    r"|[a-zA-Z_$][\w$]*|[^\s]"
+    r"|[a-zA-Z_$][\w$]*|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|[^\s]"
 )
 
 
@@ -184,6 +186,38 @@ def _extract_meta(soup: BeautifulSoup, result: ArticleResult) -> None:
             if attr == "article_description" and len(value) > 2048:
                 value = value[:2048]
             setattr(result, attr, value)
+
+
+def _extract_item_show_type(scripts: list[Tag]) -> int | None:
+    """只读取当前文章的全局类型赋值；0 是有效类型，缺失时返回 None。"""
+    for script in scripts:
+        if "item_show_type" not in script.text:
+            continue
+        history: deque[str] = deque(maxlen=5)
+        brace_depth = 0
+        for match in _JS_DATA_TOKEN_RE.finditer(script.text):
+            if match.lastgroup == "comment":
+                continue
+            token = match.group()
+            previous = tuple(history)
+            is_global_var = (
+                brace_depth == 0
+                and previous[-3:] == ("var", "item_show_type", "=")
+            )
+            is_window_assignment = (
+                previous[-4:] == ("window", ".", "item_show_type", "=")
+                and (len(previous) < 5 or previous[-5] != ".")
+            )
+            if is_global_var or is_window_assignment:
+                value = token[1:-1] if token.startswith(("'", '"')) else token
+                if re.fullmatch(r"[0-9]+", value):
+                    return int(value)
+            if token == "{":
+                brace_depth += 1
+            elif token == "}":
+                brace_depth -= 1
+            history.append(token)
+    return None
 
 
 def _extract_account_type(script_text: str, result: ArticleResult) -> None:
@@ -416,7 +450,7 @@ def _extract_swiper_content(soup: BeautifulSoup, result: ArticleResult) -> None:
 
 
 def _extract_fullscreen_content(soup: BeautifulSoup, result: ArticleResult) -> None:
-    """从全屏布局文章中提取内容（appmsg_type 10002）。
+    """从全屏布局文字消息中提取内容。
 
     此类文章的文本存储在 text_page_info.content 中，通过 JsDecode() 编码；
     图片存储在 picture_page_info_list 的 cdn_url 字段中。
@@ -455,6 +489,61 @@ def _extract_fullscreen_content(soup: BeautifulSoup, result: ArticleResult) -> N
 # 主解析流程
 # ---------------------------------------------------------------------------
 
+# 顺序与原有 HTML 判断流程一致，用于未知类型及提取失败时的兜底。
+_CONTENT_SELECTORS = {
+    "rich_text": "div.rich_media_content",
+    "repost": "div.original_page",
+    "plain_text": "p#js_text_desc",
+    "video": "div#js_common_share_desc_wrap",
+    "swiper": "div.share_media_swiper_content",
+    "fullscreen": "div#js_fullscreen_layout_padding",
+}
+_ITEM_SHOW_TYPE_BRANCHES = {
+    0: ("rich_text", "repost"),
+    5: ("video",),
+    8: ("swiper",),
+    10: ("plain_text", "fullscreen"),
+}
+
+
+def _try_content_branch(
+    branch: str,
+    soup: BeautifulSoup,
+    scripts: list[Tag],
+    result: ArticleResult,
+    *,
+    require_html: bool,
+) -> ArticleResult | None:
+    content = soup.select_one(_CONTENT_SELECTORS[branch])
+    rich_text_template = branch in ("rich_text", "repost")
+    if content is None and (require_html or rich_text_template):
+        return None
+
+    # 失败分支的图片、元数据和标题处理不能污染后续分支。
+    candidate = replace(result, images=result.images.copy())
+    extract_meta = _extract_rich_text_meta if rich_text_template else _extract_swiper_meta
+    for script in scripts:
+        extract_meta(script.text, candidate)
+
+    if branch == "rich_text":
+        _extract_rich_media_content(content, candidate)
+    elif branch == "repost":
+        _extract_repost_content(content, candidate)
+    elif branch in ("plain_text", "video"):
+        _extract_plain_text_content(soup, candidate)
+    elif branch == "swiper":
+        _extract_swiper_content(soup, candidate)
+    elif branch == "fullscreen":
+        _extract_fullscreen_content(soup, candidate)
+
+    if not candidate.article_markdown.strip():
+        return None
+    if branch in ("plain_text", "fullscreen") and len(candidate.article_title) > 50:
+        short = candidate.article_title.split("。")[0]
+        candidate.article_title = short if len(short) <= 50 else candidate.article_title[:30]
+    return candidate
+
+
 def _parse_html(url: str, html: str) -> ArticleResult:
     """将原始 HTML 解析为 ArticleResult。"""
     # 检测微信验证码/人机验证页面
@@ -473,59 +562,23 @@ def _parse_html(url: str, html: str) -> ArticleResult:
 
     scripts = soup.find_all("script", attrs={"type": "text/javascript"})
 
-    # 尝试解析标准富文本文章
-    content = soup.find("div", class_="rich_media_content")
-    if content:
-        for s in scripts:
-            _extract_rich_text_meta(s.text, result)
-        _extract_rich_media_content(content, result)
-        return result
-
-    # 尝试解析转载式文章
-    content = soup.find("div", class_="original_page")
-    if content:
-        for s in scripts:
-            _extract_rich_text_meta(s.text, result)
-        _extract_repost_content(content, result)
-        return result
-
-    # 尝试解析纯文本文章
-    content = soup.find("p", id="js_text_desc")
-    if content:
-        for s in scripts:
-            _extract_swiper_meta(s.text, result)
-        _extract_plain_text_content(soup, result)
-        if result.article_title and len(result.article_title) > 50:
-            short = result.article_title.split("。")[0]
-            result.article_title = short if len(short) <= 50 else result.article_title[:30]
-        return result
-
-    # 尝试解析视频分享类文章
-    content = soup.find("div", id="js_common_share_desc_wrap")
-    if content:
-        for s in scripts:
-            _extract_swiper_meta(s.text, result)
-        _extract_plain_text_content(soup, result)
-        return result
-
-    # 尝试解析小红书风格图片轮播文章
-    content = soup.find("div", class_="share_media_swiper_content")
-    if content:
-        for s in scripts:
-            _extract_swiper_meta(s.text, result)
-        _extract_swiper_content(soup, result)
-        return result
-
-    # 尝试解析全屏布局文章（如短文本帖子，appmsg_type 10002）
-    content = soup.find("div", id="js_fullscreen_layout_padding")
-    if content:
-        for s in scripts:
-            _extract_swiper_meta(s.text, result)
-        _extract_fullscreen_content(soup, result)
-        if result.article_title and len(result.article_title) > 50:
-            short = result.article_title.split("。")[0]
-            result.article_title = short if len(short) <= 50 else result.article_title[:30]
-        return result
+    result.item_show_type = _extract_item_show_type(scripts)
+    preferred = _ITEM_SHOW_TYPE_BRANCHES.get(result.item_show_type, ())
+    attempted: set[str] = set()
+    for branch in (*preferred, *_CONTENT_SELECTORS):
+        if branch in attempted:
+            continue
+        attempted.add(branch)
+        # 已知类型先用对应的 DOM 或脚本数据细分模板；失败后按原有 HTML 顺序兜底。
+        candidate = _try_content_branch(
+            branch,
+            soup,
+            scripts,
+            result,
+            require_html=branch not in preferred,
+        )
+        if candidate is not None:
+            return candidate
 
     # 兜底：尽可能提取元数据
     for s in scripts:

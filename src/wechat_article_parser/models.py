@@ -52,9 +52,12 @@ class ArticleResult:
     # 文章中提取的图片列表
     images: list[str] = field(default_factory=list)
 
+    # 页面展示类型，未读取到有效数值时为 None（0 是有效类型）
+    item_show_type: int | None = None
+
     @property
     def is_valid(self) -> bool:
-        """检查关键字段是否解析成功。"""
+        """检查关键字段是否解析成功；视频分享（类型 5）允许正文为空。"""
         return bool(
             self.mp_id
             and self.mp_name
@@ -63,6 +66,6 @@ class ArticleResult:
             and self.article_idx
             and self.article_sn
             and self.article_title
-            and self.article_markdown
+            and (self.article_markdown or self.item_show_type == 5)
             and self.article_publish_time
         )
