@@ -35,12 +35,22 @@ _JS_DATA_TOKEN_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 class _MarkdownConverter(MarkdownConverter):
-    def convert_span(self, el, text, parent_tags):
-        return text.strip()
+    def convert_br(self, el, text, parent_tags):
+        # 代码中的换行不需要 Markdown 硬换行所用的两个尾随空格。
+        if "pre" in parent_tags:
+            return "\n"
+        return super().convert_br(el, text, parent_tags)
 
-    def convert_p(self, el, text, parent_tags):
-        text = " ".join(text.split())
-        return super().convert_p(el, text, parent_tags)
+    def convert_pre(self, el, text, parent_tags):
+        # BeautifulSoup 已解码 &nbsp;；代码中将其还原为可直接复制的普通空格。
+        return super().convert_pre(el, text.replace("\xa0", " "), parent_tags)
+
+    def convert_td(self, el, text, parent_tags):
+        # GFM 表格内的管道符即使位于行内代码中，也必须转义。
+        return super().convert_td(el, text.replace("|", r"\|"), parent_tags)
+
+    def convert_th(self, el, text, parent_tags):
+        return super().convert_th(el, text.replace("|", r"\|"), parent_tags)
 
 
 def _to_markdown(html: str) -> str:
@@ -50,8 +60,7 @@ def _to_markdown(html: str) -> str:
 def _to_markdown_plain(html: str) -> str:
     """用于纯文本类内容（纯文本/转载/视频/轮播/全屏）的转换。
 
-    这些内容由 <br> 承载换行，必须保留；故使用未覆写 convert_p 的基础转换器，
-    避免 _MarkdownConverter 折叠空白时把换行一并吞掉。
+    这些内容由 <br> 承载换行，使用基础转换器保留换行。
     """
     return MarkdownConverter().convert(html)
 
@@ -332,7 +341,8 @@ def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
 
 def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None:
     """将 rich_media_content 区块转换为 Markdown。"""
-    soup = BeautifulSoup(content_tag.prettify(), "html.parser")
+    # prettify 会在行内标签之间插入空白，改变代码和引用链接的内容。
+    soup = BeautifulSoup(str(content_tag), "html.parser")
     seen: set[str] = set()
 
     # 处理 <img> 标签
@@ -385,7 +395,7 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
     for tag in to_remove:
         tag.decompose()
 
-    result.article_markdown = _to_markdown(soup.prettify())
+    result.article_markdown = _to_markdown(str(soup))
 
 
 def _extract_repost_content(content_tag: Tag, result: ArticleResult) -> None:
