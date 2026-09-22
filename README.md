@@ -100,6 +100,7 @@ result = parse(
 | `article_markdown` | `str` | 文章正文的 Markdown 内容；视频分享没有文字附言时可为空 |
 | `article_publish_time` | `int` | 发布时间（Unix 时间戳） |
 | `article_display_type` | `ArticleDisplayType` | 文章展示类型：`article`、`video`、`image`、`text` 或 `unknown` |
+| `item_show_type` | `int \| None` | 微信页面中的原始展示类型：`0` 图文、`5` 视频、`8` 图片轮播、`10` 文字；其他已提取的数值原样保留，缺失或无法解析时为 `None` |
 | `raw_html` | `str` | 原始 HTML 网页源代码（仅在 `include_raw_html=True` 时填充，否则为空字符串） |
 | `images` | `list[str]` | 文章中提取的所有图片链接 |
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
@@ -129,10 +130,11 @@ if result.article_display_type == "video":
     print("视频分享可以没有文字正文")
 
 print(result.article_display_type)  # 例如 video
+print(result.item_show_type)  # 例如 5
 ```
 
 `article_display_type` 是返回结果中的数据字段，包含在 `dataclasses.asdict(result)` 中，JSON 序列化时输出语义字符串。
-微信原始的 `item_show_type` 仅在解析器内部使用，不包含在返回结果中。
+`item_show_type` 同时返回微信页面中的原始数值，也包含在 `dataclasses.asdict(result)` 中；JSON 序列化时输出数字或 `null`。
 
 ### 判断账号类型
 

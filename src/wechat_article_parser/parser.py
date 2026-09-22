@@ -579,6 +579,7 @@ def _parse_html(url: str, html: str) -> ArticleResult:
     scripts = soup.find_all("script", attrs={"type": "text/javascript"})
 
     item_show_type = _extract_item_show_type(scripts)
+    result.item_show_type = item_show_type
     result.article_display_type = _ARTICLE_DISPLAY_TYPES.get(
         item_show_type, ArticleDisplayType.UNKNOWN,
     )

@@ -1,5 +1,8 @@
 """类型字段优先分发、模板细分及 HTML 兜底的离线回归测试。"""
 
+from dataclasses import asdict
+import json
+
 import pytest
 from bs4 import BeautifulSoup
 
@@ -63,6 +66,9 @@ def test_read_current_article_type(script: str, expected: int | None) -> None:
     soup = BeautifulSoup(_html(script=script), "html.parser")
 
     assert parser._extract_item_show_type(soup.find_all("script")) == expected
+    result = parser._parse_html(_URL, _html(_RICH_TEXT, script))
+    assert result.item_show_type == expected
+    assert json.loads(json.dumps(asdict(result)))["item_show_type"] == expected
 
 
 @pytest.mark.parametrize("current_assignment", ["", "window.item_show_type = '8';"])
@@ -102,6 +108,7 @@ def test_type_zero_uses_html_to_distinguish_rich_text_and_repost(
     result = parser._parse_html(_URL, _html(body, 'var item_show_type = "0";'))
 
     assert result.article_display_type is ArticleDisplayType.ARTICLE
+    assert result.item_show_type == 0
     assert expected in result.article_markdown
     if expected == "转载附言":
         assert "[查看原文](https://example.com/original)" in result.article_markdown
@@ -130,7 +137,7 @@ def test_known_type_takes_priority_over_other_html_templates(
     assert expected in result.article_markdown
     assert "富文本正文" not in result.article_markdown
     assert result.article_display_type is display_type
-    assert not hasattr(result, "item_show_type")
+    assert result.item_show_type == item_type
     if item_type == 8:
         assert result.images == ["https://mmbiz.qpic.cn/mmbiz_png/body/640"]
 
@@ -154,6 +161,7 @@ def test_known_type_without_matching_data_falls_back_to_html(item_type: int) -> 
     )
 
     assert result.article_markdown == "富文本正文"
+    assert result.item_show_type == item_type
 
 
 def test_type_zero_without_matching_html_falls_back_to_other_templates() -> None:
@@ -196,6 +204,7 @@ def test_unrecognized_content_still_returns_metadata() -> None:
 
     assert result.article_title == "原标题"
     assert result.mp_alias == "account"
+    assert result.item_show_type == 999
     assert result.article_display_type is ArticleDisplayType.UNKNOWN
     assert result.article_markdown == ""
     assert not result.is_valid

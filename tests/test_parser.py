@@ -64,6 +64,7 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     print(f"文章签名:     {result.article_sn}")
     print(f"文章标题:     {result.article_title}")
     print(f"展示类型:     {result.article_display_type}")
+    print(f"原始展示类型: {result.item_show_type}")
     print(
         f"封面图:       {result.article_cover_image[:80]}..."
         if result.article_cover_image
@@ -114,6 +115,7 @@ def test_fetch_all(url: str, proxy: str | None) -> None:
     print(f"文章签名:     {result.article_sn}")
     print(f"文章标题:     {result.article_title}")
     print(f"展示类型:     {result.article_display_type}")
+    print(f"原始展示类型: {result.item_show_type}")
     print(f"封面图:       {result.article_cover_image}")
     print(f"文章摘要:     {result.article_description}")
     print(f"发布时间:     {result.article_publish_time}")

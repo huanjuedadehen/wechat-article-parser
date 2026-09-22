@@ -68,8 +68,9 @@ class ArticleResult:
     # 文章中提取的图片列表
     images: list[str] = field(default_factory=list)
 
-    # 对外返回语义展示类型，微信原始数值仅在解析器内部使用。
+    # 语义展示类型和微信页面中的原始数值。
     article_display_type: ArticleDisplayType = ArticleDisplayType.UNKNOWN
+    item_show_type: int | None = None
 
     @property
     def is_valid(self) -> bool:
