@@ -79,11 +79,11 @@ def test_display_type_has_semantic_string_values(expected: str) -> None:
     assert json.dumps(result.article_display_type) == json.dumps(expected)
     serialized = json.loads(json.dumps(asdict(result)))
     assert serialized["article_display_type"] == expected
-    assert serialized["item_show_type"] is None
+    assert serialized["article_item_show_type"] is None
 
 
 def test_default_display_type_is_unknown() -> None:
     result = ArticleResult()
     assert result.article_display_type is ArticleDisplayType.UNKNOWN
-    assert result.item_show_type is None
+    assert result.article_item_show_type is None
     assert not result.is_valid

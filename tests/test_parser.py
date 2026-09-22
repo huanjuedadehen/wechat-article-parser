@@ -47,6 +47,7 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     print(f"公众号ID:     {result.mp_id}")
     print(f"公众号名称:   {result.mp_name}")
     print(f"公众号别名:   {result.mp_alias}")
+    print(f"公众号用户名: {result.mp_user_name}")
     print(f"账号类型:     {result.mp_account_type}")
     print(
         f"公众号图片:   {result.mp_image[:80]}..."
@@ -64,7 +65,7 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     print(f"文章签名:     {result.article_sn}")
     print(f"文章标题:     {result.article_title}")
     print(f"展示类型:     {result.article_display_type}")
-    print(f"原始展示类型: {result.item_show_type}")
+    print(f"原始展示类型: {result.article_item_show_type}")
     print(
         f"封面图:       {result.article_cover_image[:80]}..."
         if result.article_cover_image
@@ -83,6 +84,7 @@ def _assert_result(result: ArticleResult, url: str) -> None:
 
     assert result.mp_id > 0, "mp_id should be positive"
     assert result.mp_name, "mp_name should not be empty"
+    assert result.mp_user_name, "mp_user_name should not be empty for these reference articles"
     assert result.article_id, "article_id should not be empty"
     assert result.article_msg_id > 0, "article_msg_id should be positive"
     assert result.article_idx > 0, "article_idx should be positive"
@@ -106,6 +108,7 @@ def test_fetch_all(url: str, proxy: str | None) -> None:
     print(f"公众号ID:     {result.mp_id}")
     print(f"公众号名称:   {result.mp_name}")
     print(f"公众号别名:   {result.mp_alias}")
+    print(f"公众号用户名: {result.mp_user_name}")
     print(f"账号类型:     {result.mp_account_type}")
     print(f"公众号图片:   {result.mp_image}")
     print(f"公众号简介:   {result.mp_description}")
@@ -115,7 +118,7 @@ def test_fetch_all(url: str, proxy: str | None) -> None:
     print(f"文章签名:     {result.article_sn}")
     print(f"文章标题:     {result.article_title}")
     print(f"展示类型:     {result.article_display_type}")
-    print(f"原始展示类型: {result.item_show_type}")
+    print(f"原始展示类型: {result.article_item_show_type}")
     print(f"封面图:       {result.article_cover_image}")
     print(f"文章摘要:     {result.article_description}")
     print(f"发布时间:     {result.article_publish_time}")

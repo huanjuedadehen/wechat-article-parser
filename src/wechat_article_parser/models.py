@@ -70,7 +70,10 @@ class ArticleResult:
 
     # 语义展示类型和微信页面中的原始数值。
     article_display_type: ArticleDisplayType = ArticleDisplayType.UNKNOWN
-    item_show_type: int | None = None
+    article_item_show_type: int | None = None
+
+    # 当前公众号的页面全局 user_name，未提取到时为空字符串。
+    mp_user_name: str = ""
 
     @property
     def is_valid(self) -> bool:

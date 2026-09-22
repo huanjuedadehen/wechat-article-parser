@@ -229,6 +229,84 @@ def _extract_item_show_type(scripts: list[Tag]) -> int | None:
     return None
 
 
+def _extract_user_name(scripts: list[Tag]) -> str:
+    """读取全局 user_name，缺失时读取 window.cgiDataNew 的直接属性。
+
+    文章元数据脚本中该变量位于 nickname、ct 附近；不依赖行号或账号值。
+    使用词法标记跳过注释和字符串，不执行页面脚本。
+    """
+    for script in scripts:
+        if "user_name" not in script.text:
+            continue
+        history: deque[str] = deque(maxlen=4)
+        brace_depth = 0
+        for match in _JS_DATA_TOKEN_RE.finditer(script.text):
+            if match.lastgroup == "comment":
+                continue
+            token = match.group()
+            previous = tuple(history)
+            if (
+                brace_depth == 0
+                and token == ";"
+                and previous[:3] == ("var", "user_name", "=")
+                and len(previous) == 4
+                and previous[3].startswith(("'", '"'))
+            ):
+                value = _decode_text(previous[3][1:-1])
+                if value:
+                    return value
+            if token == "{":
+                brace_depth += 1
+            elif token == "}":
+                brace_depth -= 1
+            history.append(token)
+    return _extract_cgi_user_name(scripts)
+
+
+def _extract_cgi_user_name(scripts: list[Tag]) -> str:
+    """从当前文章的 cgiDataNew 对象中读取 user_name，排除嵌套账号。"""
+    for script in scripts:
+        if "cgiDataNew" not in script.text or "user_name" not in script.text:
+            continue
+        history: deque[str] = deque(maxlen=5)
+        stack: list[str] = []
+        for match in _JS_DATA_TOKEN_RE.finditer(script.text):
+            if match.lastgroup == "comment":
+                continue
+            token = match.group()
+            previous = tuple(history)
+            if not stack:
+                if (
+                    token == "{"
+                    and previous[-4:] == ("window", ".", "cgiDataNew", "=")
+                    and (len(previous) < 5 or previous[-5] != ".")
+                ):
+                    stack.append(token)
+            else:
+                # 只接受完整的字符串属性值，不读取表达式或嵌套对象的值。
+                if (
+                    stack == ["{"]
+                    and token in (",", "}")
+                    and len(previous) >= 4
+                    and previous[-4] in ("{", ",")
+                    and previous[-3].strip("\"'") == "user_name"
+                    and previous[-2] == ":"
+                    and previous[-1].startswith(("'", '"'))
+                ):
+                    value = _decode_text(previous[-1][1:-1])
+                    if value:
+                        return value
+                if token in ("{", "["):
+                    stack.append(token)
+                elif token in ("}", "]"):
+                    if stack[-1] == {"}": "{", "]": "["}[token]:
+                        stack.pop()
+                    else:
+                        stack.clear()
+            history.append(token)
+    return ""
+
+
 def _extract_account_type(script_text: str, result: ArticleResult) -> None:
     """从 new_service_type 中提取账号类型：0/1 → 订阅号，2 → 服务号。"""
     if result.mp_account_type:
@@ -578,8 +656,9 @@ def _parse_html(url: str, html: str) -> ArticleResult:
 
     scripts = soup.find_all("script", attrs={"type": "text/javascript"})
 
+    result.mp_user_name = _extract_user_name(soup.find_all("script"))
     item_show_type = _extract_item_show_type(scripts)
-    result.item_show_type = item_show_type
+    result.article_item_show_type = item_show_type
     result.article_display_type = _ARTICLE_DISPLAY_TYPES.get(
         item_show_type, ArticleDisplayType.UNKNOWN,
     )
