@@ -441,6 +441,9 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
     """将 rich_media_content 区块转换为 Markdown。"""
     # prettify 会在行内标签之间插入空白，改变代码和引用链接的内容。
     soup = BeautifulSoup(str(content_tag), "html.parser")
+    has_video = soup.select_one(
+        'mp-common-videosnap[data-type="video"], iframe.video_iframe, iframe.wx_video_iframe'
+    ) is not None
     seen: set[str] = set()
 
     # 处理 <img> 标签
@@ -494,6 +497,8 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
         tag.decompose()
 
     result.article_markdown = _to_markdown(str(soup))
+    if has_video and not result.article_markdown.strip():
+        result.article_markdown = "这是一篇纯视频内容。"
 
 
 def _extract_repost_content(
