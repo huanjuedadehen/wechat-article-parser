@@ -78,6 +78,21 @@ def _decode_hex_escapes(text: str) -> str:
     return re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m.group(1), 16)), text)
 
 
+def _decode_js_string(text: str) -> str:
+    """解码 JS 字符串转义，保留 HTML 实体、百分号和正文中的空白。"""
+    escapes = {
+        "n": "\n", "r": "\r", "t": "\t", "b": "\b", "f": "\f", "v": "\v",
+        "0": "\0", "\n": "", "\r": "", "\r\n": "",
+    }
+
+    def decode(match: re.Match[str]) -> str:
+        if match[1] or match[2]:
+            return chr(int(match[1] or match[2], 16))
+        return escapes.get(match[3], match[3])
+
+    return re.sub(r"\\(?:x([\da-fA-F]{2})|u([\da-fA-F]{4})|(\r\n|[\s\S]))", decode, text)
+
+
 def _decode_text(text: str, *, preserve_newlines: bool = False) -> str:
     if not text:
         return ""
@@ -265,8 +280,13 @@ def _extract_user_name(scripts: list[Tag]) -> str:
 
 def _extract_cgi_user_name(scripts: list[Tag]) -> str:
     """从当前文章的 cgiDataNew 对象中读取 user_name，排除嵌套账号。"""
+    return _decode_text(_extract_cgi_string(scripts, "user_name"))
+
+
+def _extract_cgi_string(scripts: list[Tag], field: str) -> str:
+    """读取当前 cgiDataNew 的直接字符串属性，不执行表达式或读取嵌套对象。"""
     for script in scripts:
-        if "cgiDataNew" not in script.text or "user_name" not in script.text:
+        if "cgiDataNew" not in script.text or field not in script.text:
             continue
         history: deque[str] = deque(maxlen=5)
         stack: list[str] = []
@@ -289,12 +309,12 @@ def _extract_cgi_user_name(scripts: list[Tag]) -> str:
                     and token in (",", "}")
                     and len(previous) >= 4
                     and previous[-4] in ("{", ",")
-                    and previous[-3].strip("\"'") == "user_name"
+                    and previous[-3].strip("\"'") == field
                     and previous[-2] == ":"
                     and previous[-1].startswith(("'", '"'))
                 ):
-                    value = _decode_text(previous[-1][1:-1])
-                    if value:
+                    value = previous[-1][1:-1]
+                    if value.strip():
                         return value
                 if token in ("{", "["):
                     stack.append(token)
@@ -476,27 +496,50 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
     result.article_markdown = _to_markdown(str(soup))
 
 
-def _extract_repost_content(content_tag: Tag, result: ArticleResult) -> None:
-    """从转载式文章中提取内容。"""
-    soup = BeautifulSoup(content_tag.prettify(), "html.parser")
+def _extract_repost_content(
+    content_tag: Tag, scripts: list[Tag], result: ArticleResult,
+) -> None:
+    """读取转载附言、cgiDataNew 中的富文本正文和原文链接。"""
+    soup = BeautifulSoup(str(content_tag), "html.parser")
+    parts: list[str] = []
     notice = soup.find("p", id="js_share_notice")
-    if not notice:
-        return
+    if notice:
+        m = re.search(
+            r'''innerHTML\s*=\s*("(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')''',
+            str(notice),
+        )
+        if m:
+            text = _decode_text(_decode_js_string(m[1][1:-1]), preserve_newlines=True)
+            notice_markdown = _to_markdown_plain(f"<p>{text}</p>")
+        else:
+            for script in notice.find_all("script"):
+                script.decompose()
+            notice_markdown = _to_markdown_plain(str(notice))
+        if notice_markdown.strip():
+            parts.append(notice_markdown.strip())
 
-    m = re.search(r'innerHTML = "([^"]+)"', str(notice))
-    if not m:
-        return
+    for field in ("content_noencode", "content"):
+        body = _extract_cgi_string(scripts, field)
+        if body:
+            # 与普通富文本共用图片和 Markdown 处理，避免 data-src 变成空图片链接。
+            body_soup = BeautifulSoup(_decode_js_string(body), "html.parser")
+            _extract_rich_media_content(body_soup, result)
+            if result.article_markdown.strip():
+                parts.append(result.article_markdown.strip())
+                break
 
-    text = _decode_text(m.group(1), preserve_newlines=True)
-    html_content = f"<p>{text}</p>"
+    if not parts:
+        return
 
     share_link = soup.find("span", id="js_share_source")
     if share_link:
         href = share_link.get("data-url")
         if href:
-            html_content += f'<p><a href="{href}">查看原文</a></p>'
+            link = soup.new_tag("a", href=href)
+            link.string = "查看原文"
+            parts.append(_to_markdown_plain(str(link)))
 
-    result.article_markdown = _to_markdown_plain(html_content)
+    result.article_markdown = "\n\n".join(parts)
 
 
 def _extract_plain_text_content(soup: BeautifulSoup, result: ArticleResult) -> None:
@@ -622,7 +665,7 @@ def _try_content_branch(
     if branch == "rich_text":
         _extract_rich_media_content(content, candidate)
     elif branch == "repost":
-        _extract_repost_content(content, candidate)
+        _extract_repost_content(content, scripts, candidate)
     elif branch in ("plain_text", "video"):
         _extract_plain_text_content(soup, candidate)
     elif branch == "swiper":
