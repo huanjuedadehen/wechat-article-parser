@@ -444,8 +444,6 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
     has_video = soup.select_one(
         'mp-common-videosnap[data-type="video"], iframe.video_iframe, iframe.wx_video_iframe'
     ) is not None
-    seen: set[str] = set()
-
     # 处理 <img> 标签
     to_remove = []
     for img in soup.find_all("img"):
@@ -453,17 +451,13 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
         if src and src.startswith("http"):
             normalized = _normalize_image_url(src)
             img["src"] = normalized
-            if normalized not in seen:
-                seen.add(normalized)
-                result.images.append(normalized)
         else:
             to_remove.append(img)
     for tag in to_remove:
         tag.decompose()
 
-    # 处理含有 background-image 的 <svg> 标签
-    # 部分文章用嵌套 SVG（外层 SVG > foreignobject > 内层 SVG）承载正文图片，
-    # 需从外向内收集所有图片 URL，一次性替换为多个 <img> 标签
+    # SVG 可通过 background-image 或 foreignObject 内的 <img> 承载正文图片。
+    # 按文档顺序收集两种图片，再统一替换外层 SVG，避免删除内部正文图片。
     to_remove = []
     for svg in soup.find_all("svg", recursive=True):
         # 跳过已被外层 SVG 处理过的嵌套 SVG（已脱离文档树）
@@ -473,11 +467,14 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
         if svg.find_parent("svg"):
             continue
 
-        # 收集本 SVG 及所有后代 SVG 中的 background-image 图片
-        all_svgs = [svg] + svg.find_all("svg")
+        # 包含所有嵌套 SVG 和普通图片，保留正文中的重复图片及 alt 文本。
+        image_elements = [svg] + svg.find_all(["svg", "img"])
         img_tags = []
-        for s in all_svgs:
-            style = s.get("style", "")
+        for element in image_elements:
+            if element.name == "img":
+                img_tags.append(soup.new_tag("img", attrs=element.attrs.copy()))
+                continue
+            style = element.get("style", "")
             if "background-image" not in style:
                 continue
             m = re.search(r'url\("([^"]+)"\)', style)
@@ -485,9 +482,6 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
                 continue
             normalized = _normalize_image_url(m.group(1))
             img_tags.append(soup.new_tag("img", src=normalized))
-            if normalized not in seen:
-                seen.add(normalized)
-                result.images.append(normalized)
 
         if img_tags:
             svg.replace_with(*img_tags)
@@ -495,6 +489,14 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
             to_remove.append(svg)
     for tag in to_remove:
         tag.decompose()
+
+    # 从最终正文收集图片，使列表顺序与 Markdown 一致，并只对列表去重。
+    seen: set[str] = set()
+    for img in soup.find_all("img"):
+        src = img["src"]
+        if src not in seen:
+            seen.add(src)
+            result.images.append(src)
 
     result.article_markdown = _to_markdown(str(soup))
     if not result.article_markdown.strip():
