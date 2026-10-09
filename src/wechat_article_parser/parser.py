@@ -444,6 +444,24 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
     has_video = soup.select_one(
         'mp-common-videosnap[data-type="video"], iframe.video_iframe, iframe.wx_video_iframe'
     ) is not None
+
+    # 原生公众号卡片的正文保存在属性中，转换为“名称 + 简介”的独立段落。
+    for profile in soup.find_all("mp-common-profile"):
+        nickname = profile.get("data-nickname", "").strip()
+        signature = profile.get("data-signature", "").strip()
+        if not nickname and not signature:
+            continue
+        paragraph = soup.new_tag("p")
+        if nickname:
+            name = soup.new_tag("strong")
+            name.string = nickname
+            paragraph.append(name)
+        if signature:
+            if nickname:
+                paragraph.append("：")
+            paragraph.append(signature)
+        profile.replace_with(paragraph)
+
     # 处理 <img> 标签
     to_remove = []
     for img in soup.find_all("img"):
