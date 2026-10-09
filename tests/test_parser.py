@@ -16,6 +16,18 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/ySQdtsRlRmAl_skdc5HQ-A",
     "https://mp.weixin.qq.com/s/MnkArbYQNp3tF29gujMUnQ",
     "https://mp.weixin.qq.com/s/ncPoZnxKdvDRLM_s4DBgmA",
+    # 转载页面的静态附言及脚本正文。
+    "https://mp.weixin.qq.com/s/Pq-JkEjhoIlLvTMzWKVtOw",
+    "https://mp.weixin.qq.com/s/X51M6PfionI6UpX4zsG78Q",
+    # 视频号卡片和微信视频 iframe 的纯视频正文。
+    "https://mp.weixin.qq.com/s/wAyM7yYKDfTH21-XpS9agQ",
+    "https://mp.weixin.qq.com/s/a7P56VOipWNB0UyNaVOZYQ",
+    # 付费受限正文。
+    "https://mp.weixin.qq.com/s/n2q09-I95zwggfbXKAmbuQ",
+    # SVG foreignObject 承载的正文图片。
+    "https://mp.weixin.qq.com/s/3ixeC9whuEgpup2G1yvDZg",
+    # 纯公众号推荐卡片正文。
+    "https://mp.weixin.qq.com/s/PXZuh3fFEi3VXUUI1uBnlw",
 ]
 
 
