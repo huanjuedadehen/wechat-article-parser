@@ -497,8 +497,11 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
         tag.decompose()
 
     result.article_markdown = _to_markdown(str(soup))
-    if has_video and not result.article_markdown.strip():
-        result.article_markdown = "这是一篇纯视频内容。"
+    if not result.article_markdown.strip():
+        if soup.find("mp-pay-preview-filter") is not None:
+            result.article_markdown = "这是一篇付费内容，正文需付费后查看。"
+        elif has_video:
+            result.article_markdown = "这是一篇纯视频内容。"
 
 
 def _extract_repost_content(

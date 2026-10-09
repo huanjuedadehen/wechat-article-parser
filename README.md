@@ -16,6 +16,8 @@
 类型字段缺失、值未知或对应分支未提取到正文时，会按原有 HTML 特征匹配顺序兜底。
 
 图文正文仅包含视频号视频卡片或微信视频 iframe 时，Markdown 返回“这是一篇纯视频内容。”。
+正文只有付费预览占位标签时，Markdown 返回“这是一篇付费内容，正文需付费后查看。”，
+并保留公开元数据；已有的可见预览正文仍正常提取。
 
 ## 安装
 
@@ -109,6 +111,8 @@ result = parse(
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
 
 `is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_id`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type == "video"`。视频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频文件。
+
+付费受限页面返回提示且关键元数据完整时，`is_valid` 也为 `True`，这不表示已获取付费正文。
 
 ### 判断文章展示类型
 
