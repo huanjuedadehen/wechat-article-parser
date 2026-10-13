@@ -8,10 +8,11 @@
 - 转载式文章
 - 纯文本文章
 - 视频分享类文章
+- 音频分享类文章
 - 小红书风格图片轮播文章
 - 全屏布局短文本文章
 
-解析时优先读取页面全局的 `item_show_type`：`0` 对应图文、`5` 对应视频分享、
+解析时优先读取页面全局的 `item_show_type`：`0` 对应图文、`5` 对应视频分享、`7` 对应音频分享、
 `8` 对应图片轮播、`10` 对应文字消息，再通过 HTML 或脚本数据区分具体模板。
 类型字段缺失、值未知或对应分支未提取到正文时，会按原有 HTML 特征匹配顺序兜底。
 
@@ -104,15 +105,15 @@ result = parse(
 | `article_title` | `str` | 文章标题 |
 | `article_cover_image` | `str` | 文章封面图链接 |
 | `article_description` | `str` | 文章摘要 |
-| `article_markdown` | `str` | 文章正文的 Markdown 内容；视频分享没有文字附言时可为空 |
+| `article_markdown` | `str` | 文章正文的 Markdown 内容；视频或音频分享没有文字附言时可为空 |
 | `article_publish_time` | `int` | 发布时间（Unix 时间戳） |
-| `article_display_type` | `ArticleDisplayType` | 文章展示类型：`article`、`video`、`image`、`text` 或 `unknown` |
-| `article_item_show_type` | `int \| None` | 微信页面中的原始展示类型：`0` 图文、`5` 视频、`8` 图片轮播、`10` 文字；其他已提取的数值原样保留，缺失或无法解析时为 `None` |
+| `article_display_type` | `ArticleDisplayType` | 文章展示类型：`article`、`video`、`audio`、`image`、`text` 或 `unknown` |
+| `article_item_show_type` | `int \| None` | 微信页面中的原始展示类型：`0` 图文、`5` 视频、`7` 音频、`8` 图片轮播、`10` 文字；其他已提取的数值原样保留，缺失或无法解析时为 `None` |
 | `raw_html` | `str` | 原始 HTML 网页源代码（仅在 `include_raw_html=True` 时填充，否则为空字符串） |
 | `images` | `list[str]` | 文章中提取的所有图片链接 |
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
 
-`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_id`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type == "video"`。视频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频文件。
+`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_id`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type in ("video", "audio")`。视频和音频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频或音频文件。
 
 付费受限页面返回提示且关键元数据完整时，`is_valid` 也为 `True`，这不表示已获取付费正文。
 
@@ -124,6 +125,7 @@ result = parse(
 |---|---|---|
 | `ArticleDisplayType.ARTICLE` | `article` | 图文，包括转载式 |
 | `ArticleDisplayType.VIDEO` | `video` | 视频分享 |
+| `ArticleDisplayType.AUDIO` | `audio` | 音频分享 |
 | `ArticleDisplayType.IMAGE` | `image` | 图片轮播 |
 | `ArticleDisplayType.TEXT` | `text` | 文字消息 |
 | `ArticleDisplayType.UNKNOWN` | `unknown` | 页面类型缺失或未支持 |
@@ -197,7 +199,7 @@ except httpx.HTTPStatusError as e:
 
 ### 解析不完整
 
-缺少标题、发布时间等关键字段，或非视频分享缺少正文时，解析结果的 `is_valid` 会返回 `False`。封面图、摘要等非必填字段为空不影响有效性。建议在业务逻辑中检查：
+缺少标题、发布时间等关键字段，或非视频/音频分享缺少正文时，解析结果的 `is_valid` 会返回 `False`。封面图、摘要等非必填字段为空不影响有效性。建议在业务逻辑中检查：
 
 ```python
 result = parse("https://mp.weixin.qq.com/s/xxxxx")

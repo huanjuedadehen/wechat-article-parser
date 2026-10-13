@@ -28,6 +28,8 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/3ixeC9whuEgpup2G1yvDZg",
     # 纯公众号推荐卡片正文。
     "https://mp.weixin.qq.com/s/PXZuh3fFEi3VXUUI1uBnlw",
+    # 无文字正文的音频分享。
+    "https://mp.weixin.qq.com/s/y4QxlYs7u0X9TdvZatCfIA",
 ]
 
 
@@ -102,8 +104,8 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     assert result.article_idx > 0, "article_idx should be positive"
     assert result.article_sn, "article_sn should not be empty"
     assert result.article_title, "article_title should not be empty"
-    if result.article_display_type != "video":
-        assert result.article_markdown, "article_markdown should not be empty for non-video articles"
+    if result.article_display_type not in ("video", "audio"):
+        assert result.article_markdown, "article_markdown should not be empty for non-video/audio articles"
     assert result.article_publish_time > 0, "article_publish_time should be positive"
     assert result.is_valid
 

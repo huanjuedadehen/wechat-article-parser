@@ -28,6 +28,7 @@ class ArticleDisplayType(str, Enum):
     UNKNOWN = "unknown"
     ARTICLE = "article"
     VIDEO = "video"
+    AUDIO = "audio"
     IMAGE = "image"
     TEXT = "text"
 
@@ -77,7 +78,7 @@ class ArticleResult:
 
     @property
     def is_valid(self) -> bool:
-        """检查关键字段是否解析成功；视频分享允许正文为空。"""
+        """检查关键字段是否解析成功；视频和音频分享允许正文为空。"""
         return bool(
             self.mp_id
             and self.mp_name
@@ -88,7 +89,9 @@ class ArticleResult:
             and self.article_title
             and (
                 self.article_markdown
-                or self.article_display_type == ArticleDisplayType.VIDEO
+                or self.article_display_type in (
+                    ArticleDisplayType.VIDEO, ArticleDisplayType.AUDIO,
+                )
             )
             and self.article_publish_time
         )

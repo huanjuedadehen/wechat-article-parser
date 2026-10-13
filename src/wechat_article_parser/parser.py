@@ -660,12 +660,14 @@ _CONTENT_SELECTORS = {
 _ITEM_SHOW_TYPE_BRANCHES = {
     0: ("rich_text", "repost"),
     5: ("video",),
+    7: ("video",),  # 音频分享复用视频分享的文字附言提取。
     8: ("swiper",),
     10: ("plain_text", "fullscreen"),
 }
 _ARTICLE_DISPLAY_TYPES = {
     0: ArticleDisplayType.ARTICLE,
     5: ArticleDisplayType.VIDEO,
+    7: ArticleDisplayType.AUDIO,
     8: ArticleDisplayType.IMAGE,
     10: ArticleDisplayType.TEXT,
 }

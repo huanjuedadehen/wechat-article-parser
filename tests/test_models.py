@@ -22,14 +22,16 @@ _COMPLETE = ArticleResult(
 
 @pytest.mark.parametrize("display_type", list(ArticleDisplayType))
 @pytest.mark.parametrize("markdown", ["", "正文"])
-def test_only_video_can_be_valid_without_markdown(
+def test_only_video_and_audio_can_be_valid_without_markdown(
     display_type: ArticleDisplayType, markdown: str,
 ) -> None:
     result = replace(
         _COMPLETE, article_display_type=display_type, article_markdown=markdown,
     )
 
-    assert result.is_valid is (bool(markdown) or display_type == ArticleDisplayType.VIDEO)
+    assert result.is_valid is (
+        bool(markdown) or display_type in (ArticleDisplayType.VIDEO, ArticleDisplayType.AUDIO)
+    )
 
 
 @pytest.mark.parametrize(
@@ -45,13 +47,14 @@ def test_only_video_can_be_valid_without_markdown(
         ("article_publish_time", 0),
     ],
 )
-@pytest.mark.parametrize("markdown", ["", "视频附言"])
-def test_video_still_requires_all_key_metadata(
-    field_name: str, empty_value: str | int, markdown: str,
+@pytest.mark.parametrize("markdown", ["", "媒体附言"])
+@pytest.mark.parametrize("display_type", [ArticleDisplayType.VIDEO, ArticleDisplayType.AUDIO])
+def test_video_and_audio_still_require_all_key_metadata(
+    field_name: str, empty_value: str | int, markdown: str, display_type: ArticleDisplayType,
 ) -> None:
     result = replace(
         _COMPLETE,
-        article_display_type=ArticleDisplayType.VIDEO,
+        article_display_type=display_type,
         article_markdown=markdown,
         **{field_name: empty_value},
     )
@@ -64,6 +67,7 @@ def test_video_still_requires_all_key_metadata(
     [
         "article",
         "video",
+        "audio",
         "image",
         "text",
         "unknown",

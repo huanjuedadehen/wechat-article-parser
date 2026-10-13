@@ -49,6 +49,7 @@ def _html(body: str = "", script: str = "", title: str = "原标题") -> str:
         ("window.item_show_type = '8' || '';", 8),
         ("window.item_show_type = 10;", 10),
         ("var /* 注释 */ item_show_type = 5;", 5),
+        ("window.item_show_type = '7';", 7),
         ("(function() { window.item_show_type = '10'; })();", 10),
         ("window.item_show_type = '999';", 999),
         ("window.item_show_type = '';", None),
@@ -120,6 +121,7 @@ def test_type_zero_uses_html_to_distinguish_rich_text_and_repost(
     ("item_type", "data", "expected", "display_type"),
     [
         (5, _PLAIN_DATA, "文字正文", ArticleDisplayType.VIDEO),
+        (7, _PLAIN_DATA, "文字正文", ArticleDisplayType.AUDIO),
         (8, _SWIPER_DATA, "轮播正文", ArticleDisplayType.IMAGE),
         (10, _PLAIN_DATA, "文字正文", ArticleDisplayType.TEXT),
         (10, _FULLSCREEN_DATA, "全屏正文", ArticleDisplayType.TEXT),
@@ -153,7 +155,7 @@ def test_missing_unknown_or_invalid_type_falls_back_to_html(declaration: str) ->
     assert result.article_display_type is ArticleDisplayType.UNKNOWN
 
 
-@pytest.mark.parametrize("item_type", [5, 8, 10])
+@pytest.mark.parametrize("item_type", [5, 7, 8, 10])
 def test_known_type_without_matching_data_falls_back_to_html(item_type: int) -> None:
     result = parser._parse_html(
         _URL,
@@ -215,9 +217,10 @@ def test_unrecognized_content_still_returns_metadata() -> None:
     [
         ("", ArticleDisplayType.UNKNOWN),
         ("window.item_show_type = '5';", ArticleDisplayType.VIDEO),
+        ("window.item_show_type = '7';", ArticleDisplayType.AUDIO),
     ],
 )
-def test_video_without_description_keeps_type_and_metadata(
+def test_video_and_audio_without_description_keep_type_and_metadata(
     declaration: str, expected_type: ArticleDisplayType,
 ) -> None:
     metadata = """
@@ -247,4 +250,6 @@ def test_video_without_description_keeps_type_and_metadata(
     assert result.mp_id == 1
     assert result.mp_name == "测试公众号"
     assert result.article_markdown == ""
-    assert result.is_valid is (expected_type == ArticleDisplayType.VIDEO)
+    assert result.is_valid is (
+        expected_type in (ArticleDisplayType.VIDEO, ArticleDisplayType.AUDIO)
+    )
