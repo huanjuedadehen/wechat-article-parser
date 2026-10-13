@@ -30,6 +30,8 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/PXZuh3fFEi3VXUUI1uBnlw",
     # 无文字正文的音频分享。
     "https://mp.weixin.qq.com/s/y4QxlYs7u0X9TdvZatCfIA",
+    # 纯商品广告卡片正文。
+    "https://mp.weixin.qq.com/s/CBmoIFPJwV4BkidYGp-l1Q",
 ]
 
 

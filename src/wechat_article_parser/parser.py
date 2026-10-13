@@ -522,6 +522,8 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
             result.article_markdown = "这是一篇付费内容，正文需付费后查看。"
         elif has_video:
             result.article_markdown = "这是一篇纯视频内容。"
+        elif soup.find("mp-common-cpsad") is not None:
+            result.article_markdown = "这是一篇商品推荐内容。"
 
 
 def _extract_repost_content(
