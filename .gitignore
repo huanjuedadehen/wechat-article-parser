@@ -19,9 +19,10 @@ venv/
 # pytest
 .pytest_cache/
 
-# Claude Code
+# Local agent configuration
 .claude/
 CLAUDE.md
+AGENTS.md
 
 # OS
 .DS_Store
