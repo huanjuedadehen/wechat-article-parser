@@ -32,6 +32,8 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/y4QxlYs7u0X9TdvZatCfIA",
     # 纯商品广告卡片正文。
     "https://mp.weixin.qq.com/s/CBmoIFPJwV4BkidYGp-l1Q",
+    # 纯小程序卡片正文。
+    "https://mp.weixin.qq.com/s/qs2YxgdwWDplsmb6H8OS-w",
 ]
 
 

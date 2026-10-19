@@ -462,6 +462,26 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
             paragraph.append(signature)
         profile.replace_with(paragraph)
 
+    # 小程序卡片只保留公开文字和查看提示，不收集封面、头像或内部路径。
+    for card in soup.find_all("mp-common-miniprogram"):
+        title = card.get("data-miniprogram-title", "").strip()
+        nickname = card.get("data-miniprogram-nickname", "").strip()
+        paragraphs = []
+        if title:
+            paragraph = soup.new_tag("p")
+            heading = soup.new_tag("strong")
+            heading.string = title
+            paragraph.append(heading)
+            paragraphs.append(paragraph)
+        if nickname:
+            paragraph = soup.new_tag("p")
+            paragraph.string = f"小程序：{nickname}"
+            paragraphs.append(paragraph)
+        notice = soup.new_tag("p")
+        notice.string = "请在微信中打开小程序查看内容。"
+        paragraphs.append(notice)
+        card.replace_with(*paragraphs)
+
     # 处理 <img> 标签
     to_remove = []
     for img in soup.find_all("img"):
