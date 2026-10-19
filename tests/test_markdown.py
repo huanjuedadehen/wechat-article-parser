@@ -1,8 +1,10 @@
 """富文本 Markdown 转换的离线回归测试。"""
 
+import sys
+
 import pytest
 
-from wechat_article_parser.parser import _parse_html
+from wechat_article_parser.parser import _parse_html, _to_markdown_plain
 
 
 def _convert(body: str) -> str:
@@ -83,3 +85,48 @@ def test_literal_asterisks_in_source_stay_literal_and_inline() -> None:
         '<sup><span>[1]</span></sup><span>**：Nous Research 的自主 AI Agent</span>'
         '</section></li></ul>'
     ) == r'* \*\*Hermes[1]\*\*：Nous Research 的自主 AI Agent'
+
+
+@pytest.mark.parametrize("convert", [_convert, _to_markdown_plain])
+def test_deep_editor_wrappers_preserve_content_and_formatting(convert) -> None:
+    recursion_limit = sys.getrecursionlimit()
+    # 模拟真实文章反复粘贴产生的 span/strong 嵌套，超过默认递归上限。
+    body = (
+        '<p>前文</p><p>' + '<span><strong>' * 600
+        + '加粗 <em>斜体</em> <a href="https://example.com">链接</a>'
+        + '<br><img src="https://example.com/image.png" alt="图片">'
+        + '</strong></span>' * 600 + '</p><p>后文</p>'
+    )
+    expected = convert(
+        '<p>前文</p><p><strong>加粗 <em>斜体</em> '
+        '<a href="https://example.com">链接</a><br>'
+        '<img src="https://example.com/image.png" alt="图片">'
+        '</strong></p><p>后文</p>'
+    )
+    assert convert(body) == expected
+    assert sys.getrecursionlimit() == recursion_limit
+
+
+def test_redundant_styles_do_not_leak_into_siblings() -> None:
+    assert _convert(
+        '<p><strong>粗<span><b>体</b></span></strong> 普通 '
+        '<em>斜<span><i>体</i></span></em> '
+        '<s>删<span><del>除</del></span></s></p>'
+        '<p><b>独立加粗</b></p>'
+    ) == '**粗体** 普通 *斜体* ~~删除~~\n\n**独立加粗**'
+
+
+def test_deep_spans_preserve_code_whitespace_and_images() -> None:
+    body = (
+        '<pre><code>' + '<span>' * 1200 + '  a &lt; b<br>    next\n\n  end'
+        + '</span>' * 1200 + '</code></pre>'
+        '<p><span><img data-src="https://example.com/image.png"></span>尾文</p>'
+    )
+    result = _parse_html(
+        'https://mp.weixin.qq.com/s/test',
+        f'<div class="rich_media_content">{body}</div>',
+    )
+    assert result.article_markdown == (
+        '```\n  a < b\n    next\n\n  end\n```\n\n![](https://example.com/image.png)尾文'
+    )
+    assert result.images == ['https://example.com/image.png']

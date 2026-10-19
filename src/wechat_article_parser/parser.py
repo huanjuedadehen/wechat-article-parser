@@ -53,8 +53,36 @@ class _MarkdownConverter(MarkdownConverter):
         return super().convert_th(el, text.replace("|", r"\|"), parent_tags)
 
 
+def _prepare_markdown_soup(html: str) -> BeautifulSoup:
+    """展开编辑器产生的冗余行内标签，避免 Markdown 转换时递归超限。"""
+    soup = BeautifulSoup(html, "html.parser")
+    styles = {
+        "strong": "bold", "b": "bold",
+        "em": "italic", "i": "italic",
+        "s": "strike", "del": "strike",
+    }
+    # 显式栈遍历，清理过程本身也不依赖 Python 的递归深度。
+    stack = [(soup, frozenset())]
+    to_unwrap = []
+    while stack:
+        node, active_styles = stack.pop()
+        style = styles.get(node.name)
+        if node.name == "span" or (style and style in active_styles):
+            to_unwrap.append(node)
+        if style:
+            active_styles = active_styles | {style}
+        stack.extend(
+            (child, active_styles) for child in node.children if isinstance(child, Tag)
+        )
+
+    # 先处理内层，保留标签中的文字、链接、图片和它们的原始顺序。
+    for node in reversed(to_unwrap):
+        node.unwrap()
+    return soup
+
+
 def _to_markdown(html: str) -> str:
-    return _MarkdownConverter().convert(html)
+    return _MarkdownConverter().convert_soup(_prepare_markdown_soup(html))
 
 
 def _to_markdown_plain(html: str) -> str:
@@ -62,7 +90,7 @@ def _to_markdown_plain(html: str) -> str:
 
     这些内容由 <br> 承载换行，使用基础转换器保留换行。
     """
-    return MarkdownConverter().convert(html)
+    return MarkdownConverter().convert_soup(_prepare_markdown_soup(html))
 
 
 # ---------------------------------------------------------------------------
