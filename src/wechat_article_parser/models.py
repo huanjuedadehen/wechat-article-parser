@@ -22,6 +22,20 @@ class AccountType(str, Enum):
         return format(self.value, format_spec)
 
 
+class ArticleURLType(str, Enum):
+    """输入链接类型；仅通过长链接校验时才允许缺少文章 ID。"""
+
+    UNKNOWN = "unknown"
+    SHORT = "short"
+    LONG = "long"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __format__(self, format_spec: str) -> str:
+        return format(self.value, format_spec)
+
+
 class ArticleDisplayType(str, Enum):
     """文章展示类型，支持枚举和语义字符串比较。"""
 
@@ -79,13 +93,16 @@ class ArticleResult:
     # 页面是否包含当前文章的付费标记；不表示是否已获取付费全文。
     article_is_paid: bool = False
 
+    # 根据原始输入 URL 识别，不根据 article_id 是否为空反推。
+    article_url_type: ArticleURLType = ArticleURLType.UNKNOWN
+
     @property
     def is_valid(self) -> bool:
         """检查关键字段是否解析成功；视频和音频分享允许正文为空。"""
         return bool(
             self.mp_id
             and self.mp_name
-            and self.article_id
+            and (self.article_id or self.article_url_type == ArticleURLType.LONG)
             and self.article_msg_id
             and self.article_idx
             and self.article_sn

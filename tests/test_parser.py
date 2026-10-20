@@ -80,6 +80,7 @@ def _assert_result(result: ArticleResult, url: str) -> None:
         else "公众号简介:   (empty)"
     )
     print(f"文章ID:       {result.article_id}")
+    print(f"链接类型:     {result.article_url_type}")
     print(f"群发消息ID:   {result.article_msg_id}")
     print(f"文章idx:      {result.article_idx}")
     print(f"文章签名:     {result.article_sn}")
@@ -134,6 +135,7 @@ def test_fetch_all(url: str, proxy: str | None) -> None:
     print(f"公众号图片:   {result.mp_image}")
     print(f"公众号简介:   {result.mp_description}")
     print(f"文章ID:       {result.article_id}")
+    print(f"链接类型:     {result.article_url_type}")
     print(f"群发消息ID:   {result.article_msg_id}")
     print(f"文章idx:      {result.article_idx}")
     print(f"文章签名:     {result.article_sn}")

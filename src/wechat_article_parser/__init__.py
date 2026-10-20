@@ -1,4 +1,4 @@
-from .models import AccountType, ArticleDisplayType, ArticleResult, WeChatVerifyError
+from .models import AccountType, ArticleDisplayType, ArticleResult, ArticleURLType, WeChatVerifyError
 from .parser import parse, parse_async
 
 __all__ = [
@@ -7,5 +7,6 @@ __all__ = [
     "ArticleResult",
     "AccountType",
     "ArticleDisplayType",
+    "ArticleURLType",
     "WeChatVerifyError",
 ]

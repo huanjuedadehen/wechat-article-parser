@@ -94,6 +94,17 @@ result = parse(
 )
 ```
 
+### 长链接
+
+同步和异步接口均支持短链接 `/s/<22位文章ID>` 和长链接 `/s?__biz=...&mid=...&idx=...&sn=...&chksm=...`。
+根据原始输入 URL 识别链接类型：协议须为 HTTP/HTTPS，域名须为 `mp.weixin.qq.com`。
+长链接路径须为 `/s`，且 `__biz`、`mid`、`idx`、`sn`、`chksm` 五个查询参数必须都存在且有值，
+空字符串或纯空白不算有效值；重复参数中的每个值也须非空白。额外查询参数和片段不影响识别。
+未满足识别条件时，`article_url_type` 为 `unknown`，仍尝试解析页面，不额外抛出链接校验异常。
+
+长链接返回的 `article_id` 为空，其他字段继续从页面提取。
+只有识别为 `long` 时，`is_valid` 才允许缺少 `article_id`。
+
 ## 返回结构
 
 `parse` 和 `parse_async` 均返回 `ArticleResult` 数据类，包含以下字段：
@@ -108,7 +119,8 @@ result = parse(
 | `mp_image` | `str` | 公众号头像链接 |
 | `mp_description` | `str` | 公众号简介 |
 | `mp_account_type` | `AccountType` | 账号类型：`AccountType.SUBSCRIPTION`（订阅号）/ `AccountType.SERVICE`（服务号）/ `AccountType.UNKNOWN`（未识别） |
-| `article_id` | `str` | 文章 ID |
+| `article_id` | `str` | 短链接中的文章 ID；长链接为空字符串 |
+| `article_url_type` | `ArticleURLType` | 输入链接类型：`short`、`long` 或 `unknown`（默认）；可从包顶层导入枚举，支持字符串比较和 JSON 序列化 |
 | `article_msg_id` | `int` | 文章所在的群发消息 ID |
 | `article_idx` | `int` | 群发图文中的位置（从 1 开始） |
 | `article_sn` | `str` | 文章签名（防伪校验） |
@@ -124,7 +136,9 @@ result = parse(
 | `images` | `list[str]` | 文章中提取的所有图片链接 |
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
 
-`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_id`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type in ("video", "audio")`。视频和音频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频或音频文件。
+`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type in ("video", "audio")`。
+此外，`article_url_type == "long"` 时允许 `article_id` 为空；短链接和未识别链接仍要求 `article_id` 非空。
+视频和音频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频或音频文件。
 
 付费受限页面返回提示且关键元数据完整时，`is_valid` 也为 `True`，这不表示已获取付费正文。
 

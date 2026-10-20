@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from wechat_article_parser import ArticleDisplayType, ArticleResult
+from wechat_article_parser import ArticleDisplayType, ArticleResult, ArticleURLType
 
 
 _COMPLETE = ArticleResult(
@@ -98,3 +98,46 @@ def test_paid_field_serializes_as_boolean(is_paid: bool) -> None:
     result = ArticleResult(article_is_paid=is_paid)
     assert json.loads(json.dumps(asdict(result)))["article_is_paid"] is is_paid
     assert ArticleResult().article_is_paid is False
+
+
+@pytest.mark.parametrize("url_type", list(ArticleURLType))
+@pytest.mark.parametrize("display_type", list(ArticleDisplayType))
+@pytest.mark.parametrize("markdown", ["", "正文"])
+def test_only_long_url_can_omit_article_id(
+    url_type: ArticleURLType, display_type: ArticleDisplayType, markdown: str,
+) -> None:
+    result = replace(
+        _COMPLETE, article_id="", article_url_type=url_type,
+        article_display_type=display_type, article_markdown=markdown,
+    )
+    assert result.is_valid is (
+        url_type == ArticleURLType.LONG
+        and (bool(markdown) or display_type in (ArticleDisplayType.VIDEO, ArticleDisplayType.AUDIO))
+    )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "empty_value"),
+    [
+        ("mp_id", 0), ("mp_name", ""), ("article_msg_id", 0),
+        ("article_idx", 0), ("article_sn", ""), ("article_title", ""),
+        ("article_publish_time", 0),
+    ],
+)
+def test_long_url_still_requires_other_key_metadata(
+    field_name: str, empty_value: str | int,
+) -> None:
+    result = replace(
+        _COMPLETE, article_id="", article_url_type=ArticleURLType.LONG,
+        article_markdown="正文", **{field_name: empty_value},
+    )
+    assert not result.is_valid
+
+
+@pytest.mark.parametrize("url_type", list(ArticleURLType))
+def test_url_type_serializes_as_semantic_string(url_type: ArticleURLType) -> None:
+    result = ArticleResult(article_url_type=url_type)
+    assert str(url_type) == url_type.value
+    assert f"{url_type:>10}" == f"{url_type.value:>10}"
+    assert json.loads(json.dumps(asdict(result)))["article_url_type"] == url_type.value
+    assert ArticleResult().article_url_type is ArticleURLType.UNKNOWN

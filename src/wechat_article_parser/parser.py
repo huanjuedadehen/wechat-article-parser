@@ -7,13 +7,13 @@ import html as html_module
 import re
 from collections import deque
 from dataclasses import replace
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup, Tag
 from markdownify import MarkdownConverter
 
-from .models import AccountType, ArticleDisplayType, ArticleResult, WeChatVerifyError
+from .models import AccountType, ArticleDisplayType, ArticleResult, ArticleURLType, WeChatVerifyError
 
 _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -216,10 +216,33 @@ def _extract_picture_cdn_urls(script_text: str) -> list[str]:
 # 内部提取函数
 # ---------------------------------------------------------------------------
 
+def _extract_article_url_type(url: str) -> ArticleURLType:
+    """识别输入链接；长链接的五个必需参数均须存在且非空白。"""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return ArticleURLType.UNKNOWN
+    if (
+        parts.scheme not in ("http", "https")
+        or parts.hostname != "mp.weixin.qq.com"
+        or parts.username is not None
+        or parts.password is not None
+    ):
+        return ArticleURLType.UNKNOWN
+    if re.fullmatch(r"/s/[A-Za-z0-9_-]{22}", parts.path):
+        return ArticleURLType.SHORT
+    if parts.path == "/s":
+        params = parse_qs(parts.query, keep_blank_values=True)
+        required = ("__biz", "mid", "idx", "sn", "chksm")
+        # 保留空值，重复参数中出现空值也不能放行。
+        if all(key in params and all(value.strip() for value in params[key]) for key in required):
+            return ArticleURLType.LONG
+    return ArticleURLType.UNKNOWN
+
+
 def _extract_article_id(url: str) -> str:
-    parts = url.split("/")
-    if len(parts) == 5 and len(parts[4]) == 22:
-        return parts[4]
+    if _extract_article_url_type(url) == ArticleURLType.SHORT:
+        return urlsplit(url).path.rsplit("/", 1)[1]
     return ""
 
 
@@ -839,6 +862,7 @@ def _parse_html(url: str, html: str) -> ArticleResult:
     result = ArticleResult()
     soup = BeautifulSoup(html, "html.parser")
 
+    result.article_url_type = _extract_article_url_type(url)
     result.article_id = _extract_article_id(url)
     _extract_meta(soup, result)
 
