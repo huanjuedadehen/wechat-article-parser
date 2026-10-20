@@ -76,6 +76,9 @@ class ArticleResult:
     # 当前公众号的页面全局 user_name，未提取到时为空字符串。
     mp_user_name: str = ""
 
+    # 页面是否包含当前文章的付费标记；不表示是否已获取付费全文。
+    article_is_paid: bool = False
+
     @property
     def is_valid(self) -> bool:
         """检查关键字段是否解析成功；视频和音频分享允许正文为空。"""

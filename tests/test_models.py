@@ -91,3 +91,10 @@ def test_default_display_type_is_unknown() -> None:
     assert result.article_display_type is ArticleDisplayType.UNKNOWN
     assert result.article_item_show_type is None
     assert not result.is_valid
+
+
+@pytest.mark.parametrize("is_paid", [False, True])
+def test_paid_field_serializes_as_boolean(is_paid: bool) -> None:
+    result = ArticleResult(article_is_paid=is_paid)
+    assert json.loads(json.dumps(asdict(result)))["article_is_paid"] is is_paid
+    assert ArticleResult().article_is_paid is False

@@ -272,6 +272,69 @@ def _extract_item_show_type(scripts: list[Tag]) -> int | None:
     return None
 
 
+def _extract_is_paid(soup: BeautifulSoup, scripts: list[Tag]) -> bool:
+    """识别当前文章的付费标记，排除正文外占位符和嵌套推荐文章的数据。"""
+    if soup.select_one(
+        "div.rich_media_content mp-pay-preview-filter, "
+        "div.original_page mp-pay-preview-filter"
+    ) is not None:
+        return True
+
+    for script in scripts:
+        if "is_pay_subscribe" not in script.text:
+            continue
+        tokens = [
+            match.group() for match in _JS_DATA_TOKEN_RE.finditer(script.text)
+            if match.lastgroup != "comment"
+        ]
+        stack: list[str] = []
+        cgi_depth: int | None = None
+        for i, token in enumerate(tokens):
+            if token == "{":
+                if (
+                    tokens[max(0, i - 4):i] == ["window", ".", "cgiDataNew", "="]
+                    and (i < 5 or tokens[i - 5] != ".")
+                ):
+                    cgi_depth = len(stack) + 1
+                stack.append(token)
+            elif token in ("[", "("):
+                stack.append(token)
+            elif token in ("}", "]", ")"):
+                if stack and stack[-1] == {"}": "{", "]": "[", ")": "("}[token]:
+                    if len(stack) == cgi_depth:
+                        cgi_depth = None
+                    stack.pop()
+            if token.strip("\"'") != "is_pay_subscribe":
+                continue
+            is_global = token == "is_pay_subscribe" and (
+                (not stack and i > 0 and tokens[i - 1] in ("var", "let", "const"))
+                or (
+                    tokens[max(0, i - 2):i] == ["window", "."]
+                    and (i < 3 or tokens[i - 3] != ".")
+                )
+            )
+            is_cgi_field = (
+                cgi_depth is not None and len(stack) == cgi_depth
+                and i > 0 and tokens[i - 1] in ("{", ",")
+            )
+            separator = tokens[i + 1:i + 2]
+            if not (
+                (is_global and separator == ["="])
+                or (is_cgi_field and separator == [":"])
+            ):
+                continue
+            # 仅识别页面使用的字面量及乘 1 转数值写法，不执行 JS 表达式。
+            value = tokens[i + 2:i + 3]
+            if value not in (["1"], ["'1'"], ['"1"'], ["true"]):
+                continue
+            end = i + 3
+            if value != ["true"] and tokens[end:end + 2] == ["*", "1"]:
+                end += 2
+            if end == len(tokens) or tokens[end] in (",", ";", "}"):
+                return True
+    return False
+
+
 def _extract_user_name(scripts: list[Tag]) -> str:
     """读取全局 user_name，缺失时读取 window.cgiDataNew 的直接属性。
 
@@ -469,6 +532,8 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
     """将 rich_media_content 区块转换为 Markdown。"""
     # prettify 会在行内标签之间插入空白，改变代码和引用链接的内容。
     soup = BeautifulSoup(str(content_tag), "html.parser")
+    if soup.find("mp-pay-preview-filter") is not None:
+        result.article_is_paid = True
     has_video = soup.select_one(
         'mp-common-videosnap[data-type="video"], iframe.video_iframe, iframe.wx_video_iframe'
     ) is not None
@@ -779,7 +844,9 @@ def _parse_html(url: str, html: str) -> ArticleResult:
 
     scripts = soup.find_all("script", attrs={"type": "text/javascript"})
 
-    result.mp_user_name = _extract_user_name(soup.find_all("script"))
+    all_scripts = soup.find_all("script")
+    result.mp_user_name = _extract_user_name(all_scripts)
+    result.article_is_paid = _extract_is_paid(soup, all_scripts)
     item_show_type = _extract_item_show_type(scripts)
     result.article_item_show_type = item_show_type
     result.article_display_type = _ARTICLE_DISPLAY_TYPES.get(

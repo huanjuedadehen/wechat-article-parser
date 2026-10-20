@@ -22,6 +22,7 @@ Markdown 转换前会展开无格式作用的 `span`，合并嵌套的重复加�
 图文正文仅包含视频号视频卡片或微信视频 iframe 时，Markdown 返回“这是一篇纯视频内容。”。
 正文只有付费预览占位标签时，Markdown 返回“这是一篇付费内容，正文需付费后查看。”，
 并保留公开元数据；已有的可见预览正文仍正常提取。
+返回字段 `article_is_paid` 独立标记文章是否付费，有可见预览正文时也会识别。
 图文中的公众号推荐卡片按原文顺序转换为 `**公众号名称**：简介`，每张卡片一段；
 名称或简介缺失时，仅输出已有字段。
 图文正文仅包含商品广告卡片（`mp-common-cpsad`）时，Markdown 返回“这是一篇商品推荐内容。”；
@@ -116,6 +117,7 @@ result = parse(
 | `article_description` | `str` | 文章摘要 |
 | `article_markdown` | `str` | 文章正文的 Markdown 内容；视频或音频分享没有文字附言时可为空 |
 | `article_publish_time` | `int` | 发布时间（Unix 时间戳） |
+| `article_is_paid` | `bool` | 是否检测到当前文章的付费标记，默认 `False`；不表示是否已获取付费全文 |
 | `article_display_type` | `ArticleDisplayType` | 文章展示类型：`article`、`video`、`audio`、`image`、`text` 或 `unknown` |
 | `article_item_show_type` | `int \| None` | 微信页面中的原始展示类型：`0` 图文、`5` 视频、`7` 音频、`8` 图片轮播、`10` 文字；其他已提取的数值原样保留，缺失或无法解析时为 `None` |
 | `raw_html` | `str` | 原始 HTML 网页源代码（仅在 `include_raw_html=True` 时填充，否则为空字符串） |
@@ -125,6 +127,18 @@ result = parse(
 `is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_id`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type in ("video", "audio")`。视频和音频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频或音频文件。
 
 付费受限页面返回提示且关键元数据完整时，`is_valid` 也为 `True`，这不表示已获取付费正文。
+
+### 判断是否为付费文章
+
+```python
+result = parse("https://mp.weixin.qq.com/s/xxxxx")
+print(result.article_is_paid)  # True：识别为付费文章
+```
+
+`article_is_paid` 根据页面全局或 `window.cgiDataNew` 直接属性中的 `is_pay_subscribe`，
+以及正文中的 `mp-pay-preview-filter` 标签识别；未检测到付费标记时返回 `False`。
+该字段包含在 `dataclasses.asdict(result)` 中，JSON 序列化为布尔值。
+有可见预览或可访问正文的付费文章仍返回 `True`，正文按原有逻辑提取。
 
 ### 判断文章展示类型
 
