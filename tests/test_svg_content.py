@@ -1,5 +1,9 @@
 """SVG 容器承载正文图片的离线回归测试。"""
 
+import html
+
+import pytest
+
 from wechat_article_parser import ArticleDisplayType, ArticleResult
 from wechat_article_parser.parser import _parse_html
 
@@ -96,3 +100,48 @@ def test_decorative_svg_and_invalid_images_do_not_pollute_body() -> None:
 
     assert result.article_markdown == "正文"
     assert result.images == []
+
+
+@pytest.mark.parametrize("property_name", ["background", "background-image", "BACKGROUND"])
+@pytest.mark.parametrize("quote", ["", "'", '"'])
+def test_svg_background_variants_keep_rich_text_metadata(property_name: str, quote: str) -> None:
+    url = "https://mmecoa.qpic.cn/sz_mmecoa_jpg/body/0?wx_fmt=jpeg"
+    style = f'display: block; {property_name}: URL( {quote}{url}{quote} ) center / cover no-repeat;'
+    result = _parse(f'<svg style="{html.escape(style, quote=True)}"></svg>')
+
+    normalized = "https://mmecoa.qpic.cn/sz_mmecoa_jpg/body/640"
+    assert result.images == [normalized]
+    assert result.article_markdown == f'![]({normalized})'
+    assert result.mp_name == "CFMOTO春风动力"
+    assert result.article_publish_time == 1791454818
+    assert result.is_valid
+
+
+def test_background_shorthand_preserves_nested_order_and_repeated_images() -> None:
+    result = _parse(
+        '<p>开头</p><svg style="background: #fff url(https://example.com/first.jpg) no-repeat;">'
+        '<foreignObject><img src="https://example.com/second.jpg"></foreignObject>'
+        '<svg style="background: url(https://example.com/first.jpg)"></svg>'
+        '</svg><p>结尾</p>'
+    )
+    assert result.article_markdown == (
+        '开头\n\n![](https://example.com/first.jpg)![](https://example.com/second.jpg)'
+        '![](https://example.com/first.jpg)\n\n结尾'
+    )
+    assert result.images == ["https://example.com/first.jpg", "https://example.com/second.jpg"]
+
+
+@pytest.mark.parametrize("style", [
+    'background: none; mask-image: url(https://example.com/mask.svg)',
+    'background-color: url(https://example.com/not-background.jpg)',
+    '--background: url(https://example.com/custom.jpg)',
+    'background: url(data:image/png;base64,AA==)',
+    'background: url(/relative.jpg)',
+    'background: url("")',
+    'background: url("https://example.com/unclosed.jpg)',
+])
+def test_invalid_or_unrelated_background_urls_do_not_fill_body(style: str) -> None:
+    result = _parse(f'<svg style="{html.escape(style, quote=True)}"></svg>')
+    assert result.article_markdown == ""
+    assert result.images == []
+    assert not result.is_valid

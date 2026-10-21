@@ -38,6 +38,8 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/JfYFarShiNhiUt0cTuI4kA",
     # 纯投票组件正文。
     "https://mp.weixin.qq.com/s/mK2qOjQj2A876oFvCbrkMw",
+    # SVG background 简写承载的纯图片正文。
+    "https://mp.weixin.qq.com/s/H5ha97NIlv5A5SQU82aEbA",
 ]
 
 

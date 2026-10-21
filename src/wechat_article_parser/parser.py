@@ -661,7 +661,7 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
     for tag in to_remove:
         tag.decompose()
 
-    # SVG 可通过 background-image 或 foreignObject 内的 <img> 承载正文图片。
+    # SVG 可通过 background/background-image 或 foreignObject 内的 <img> 承载正文图片。
     # 按文档顺序收集两种图片，再统一替换外层 SVG，避免删除内部正文图片。
     to_remove = []
     for svg in soup.find_all("svg", recursive=True):
@@ -680,13 +680,18 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
                 img_tags.append(soup.new_tag("img", attrs=element.attrs.copy()))
                 continue
             style = element.get("style", "")
-            if "background-image" not in style:
-                continue
-            m = re.search(r'url\("([^"]+)"\)', style)
-            if not m:
-                continue
-            normalized = _normalize_image_url(m.group(1))
-            img_tags.append(soup.new_tag("img", src=normalized))
+            # 限定背景属性，兼容简写中的颜色、位置及单引号、双引号、无引号 URL。
+            for background in re.finditer(
+                r"(?:^|;)\s*background(?:-image)?\s*:\s*([^;]*)", style, re.I,
+            ):
+                for match in re.finditer(
+                    r'''url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s'"()]*))\s*\)''',
+                    background.group(1), re.I,
+                ):
+                    url = next(value for value in match.groups() if value is not None).strip()
+                    if url.lower().startswith(("http://", "https://")):
+                        normalized = _normalize_image_url(url)
+                        img_tags.append(soup.new_tag("img", src=normalized))
 
         if img_tags:
             svg.replace_with(*img_tags)
@@ -877,6 +882,10 @@ def _try_content_branch(
 
     # 失败分支的图片、元数据和标题处理不能污染后续分支。
     candidate = replace(result, images=result.images.copy())
+    if branch == "fullscreen" and result.article_item_show_type == 0:
+        # 图文也可能从全屏脚本取得正文；在新候选中重新读取其富文本元数据。
+        for script in scripts:
+            _extract_rich_text_meta(script.text, candidate)
     extract_meta = _extract_rich_text_meta if rich_text_template else _extract_swiper_meta
     for script in scripts:
         extract_meta(script.text, candidate)

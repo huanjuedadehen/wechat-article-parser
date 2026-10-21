@@ -212,6 +212,59 @@ def test_unrecognized_content_still_returns_metadata() -> None:
     assert not result.is_valid
 
 
+@pytest.mark.parametrize("item_type", [0, 10])
+def test_fullscreen_fallback_uses_metadata_for_current_article_type(item_type: int, monkeypatch) -> None:
+    rich_metadata = """
+    window.__allowLoadResFromMp = true;
+    var biz = "MQ==";
+    var mid = "123";
+    var idx = "1";
+    var sn = "rich-signature";
+    var hd_head_img = "https://example.com/avatar";
+    var nickname = htmlDecode("图文公众号");
+    var oriCreateTime = '1787529000';
+    """
+    text_metadata = """
+    window.__initCgiDataConfig = function(d) {
+      return {
+        biz: d.biz ? d.biz : 'Mg==',
+        nick_name: d.nick_name ? d.nick_name : '文字公众号',
+        mid: d.mid ? d.mid : '456',
+        idx: d.idx ? d.idx : '2',
+        sn: d.sn ? d.sn : 'text-signature',
+        create_time: d.create_time ? d.create_time : '1788860293'
+      };
+    };
+    """
+
+    def fail_rich_text(content, result):
+        result.mp_name = "失败分支的错误账号"
+        result.article_title = "失败分支的错误标题"
+        result.images.append("https://example.com/wrong.jpg")
+        result.article_markdown = " "
+
+    monkeypatch.setattr(parser, "_extract_rich_media_content", fail_rich_text)
+    result = parser._parse_html(_URL, _html(
+        '<div class="rich_media_content"></div><div id="js_fullscreen_layout_padding"></div>',
+        f'var item_show_type = "{item_type}";' + rich_metadata
+        + (text_metadata if item_type == 10 else "") + _FULLSCREEN_DATA,
+    ))
+
+    assert result.article_markdown == "全屏正文"
+    assert result.article_title == "原标题"
+    assert result.images == []
+    assert result.mp_name == ("图文公众号" if item_type == 0 else "文字公众号")
+    assert result.mp_id == (1 if item_type == 0 else 2)
+    assert result.article_msg_id == (123 if item_type == 0 else 456)
+    assert result.article_idx == (1 if item_type == 0 else 2)
+    assert result.article_sn == ("rich-signature" if item_type == 0 else "text-signature")
+    assert result.article_publish_time == (1787529000 if item_type == 0 else 1788860293)
+    assert result.article_display_type is (
+        ArticleDisplayType.ARTICLE if item_type == 0 else ArticleDisplayType.TEXT
+    )
+    assert result.is_valid
+
+
 @pytest.mark.parametrize(
     ("declaration", "expected_type"),
     [
