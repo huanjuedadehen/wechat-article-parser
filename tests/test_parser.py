@@ -55,6 +55,8 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/YaROYW-2DD-0jOFkE5JCyQ",
     # 纯红包封面组件正文。
     "https://mp.weixin.qq.com/s/CgWnsf3lyBijzy3L5Y7Xtg",
+    # foreignObject 定位且帧间距大于图片尺寸的 SVG 背景帧序列。
+    "https://mp.weixin.qq.com/s/6pT1xECveLM7iTqiYvjH-g",
 ]
 
 

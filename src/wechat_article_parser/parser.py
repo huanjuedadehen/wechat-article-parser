@@ -690,11 +690,17 @@ def _svg_frame_omissions(svg: Tag, media: list[tuple[Tag, Tag]]) -> set[int]:
         geometry = []
         for _, element in frames:
             owner = element if element.name != "img" else element.find_parent("foreignobject")
+            if (
+                element.name == "svg" and element.parent.name == "foreignobject"
+                and not any(element.has_attr(key) for key in ("x", "y", "width", "height"))
+            ):
+                # 背景 SVG 本身未定位时，帧位置由直接包裹它的 foreignObject 提供。
+                owner = element.parent
             if owner is None:
                 break
             # 不猜测额外坐标变换后的图片位置。
-            ancestry = [owner]
-            parent = owner.parent
+            ancestry = [element]
+            parent = element.parent
             while parent is not None and parent is not group:
                 ancestry.append(parent)
                 parent = parent.parent
@@ -715,10 +721,28 @@ def _svg_frame_omissions(svg: Tag, media: list[tuple[Tag, Tag]]) -> set[int]:
         x, y, width, height = geometry[0]
         if (x, y) != (0, 0) or width <= 0 or height <= 0:
             continue
-        horizontal = all(box == (i * width, 0, width, height) for i, box in enumerate(geometry))
-        vertical = all(box == (0, i * height, width, height) for i, box in enumerate(geometry))
+        step_x, step_y = geometry[1][:2]
+        horizontal = step_x >= width and all(
+            box == (i * step_x, 0, width, height) for i, box in enumerate(geometry)
+        )
+        vertical = step_y >= height and all(
+            box == (0, i * step_y, width, height) for i, box in enumerate(geometry)
+        )
         if not (horizontal or vertical):
             continue
+        if (horizontal and step_x > width) or (vertical and step_y > height):
+            # 稀疏排列仍须确认视口只展示当前帧，不能把同时可见的多图误当帧序列。
+            size = _svg_viewport_size(group)
+            viewport = group.find_parent("svg")
+            if not size or not (
+                width <= size[0] and height <= size[1]
+                and ((horizontal and size[0] <= step_x) or (vertical and size[1] <= step_y))
+            ):
+                continue
+            if viewport.get("overflow", "").strip().lower() == "visible" or re.search(
+                r"(?:^|;)\s*overflow\s*:\s*visible\b", viewport.get("style", ""), re.I,
+            ):
+                continue
         if any(offset != (-box[0], -box[1]) for offset, box in zip(steps, geometry)):
             continue
         # 有些帧条带带有未播放的尾图；仅在视口恰好为一帧时确认它一直在屏外。

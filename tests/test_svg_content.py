@@ -404,3 +404,50 @@ def test_repost_script_svg_body_preserves_text() -> None:
     )
     assert result.article_markdown == '转载正文\n\n![](https://example.com/body.jpg)'
     assert result.is_valid
+
+
+def _spaced_foreignobject_frames(*, vertical: bool = False, duration: str = '0.3s',
+                                extra: str = '', offset_step: int = 200) -> str:
+    offsets = ';'.join(f'0 {-i * offset_step}' if vertical else f'{-i * offset_step} 0' for i in range(3))
+    frames = ''.join(
+        f'<foreignObject x="{0 if vertical else i * 200}" y="{i * 200 if vertical else 0}" '
+        f'width="100" height="100"><svg viewBox="0 0 100 100" {extra} '
+        f'style="background:url(https://example.com/frame-{i}.jpg)"></svg></foreignObject>'
+        for i in range(3)
+    )
+    return (
+        '<g><animateTransform attributeName="transform" type="translate" calcMode="discrete" '
+        f'values="{offsets}" dur="{duration}" repeatCount="indefinite"/>{frames}</g>'
+    )
+
+
+@pytest.mark.parametrize("vertical", [False, True])
+def test_spaced_foreignobject_background_frames_keep_first_and_surrounding_content(vertical: bool) -> None:
+    result = _parse(
+        '<svg viewBox="0 0 150 150"><image href="https://example.com/static.jpg"/>'
+        + _spaced_foreignobject_frames(vertical=vertical) + '<text>正文结尾</text></svg>'
+    )
+    assert result.images == ['https://example.com/static.jpg', 'https://example.com/frame-0.jpg']
+    assert result.article_markdown == (
+        '![](https://example.com/static.jpg)![](https://example.com/frame-0.jpg)\n\n正文结尾'
+    )
+    assert result.is_valid
+
+
+@pytest.mark.parametrize("viewport", [
+    '', 'viewBox="0 0 500 500"', 'viewBox="0 0 50 50"',
+    'viewBox="0 0 150 150" overflow="visible"',
+    'viewBox="0 0 150 150" style="overflow:visible"',
+])
+def test_spaced_frames_with_uncertain_viewport_preserve_all_images(viewport: str) -> None:
+    result = _parse(f'<svg {viewport}>' + _spaced_foreignobject_frames() + '</svg>')
+    assert result.images == [f'https://example.com/frame-{i}.jpg' for i in range(3)]
+
+
+@pytest.mark.parametrize("kwargs", [
+    {'duration': '1.2s'}, {'offset_step': 150},
+    {'extra': 'transform="translate(5 0)"'}, {'extra': 'x="10"'},
+])
+def test_spaced_frames_preserve_carousel_mismatched_offsets_and_local_transforms(kwargs: dict) -> None:
+    result = _parse('<svg viewBox="0 0 150 150">' + _spaced_foreignobject_frames(**kwargs) + '</svg>')
+    assert len(result.images) == 3
