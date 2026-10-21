@@ -864,6 +864,12 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
         'mp-common-videosnap[data-type="video"], iframe.video_iframe, iframe.wx_video_iframe'
     ) is not None
 
+    # 红包封面只输出查看提示，整个组件的预览图和领取信息不进入正文。
+    for card in reversed(soup.find_all("mp-common-redpacket")):
+        notice = soup.new_tag("p")
+        notice.string = "红包封面，请在微信中查看。"
+        card.replace_with(notice)
+
     # 原生公众号卡片的正文保存在属性中，转换为“名称 + 简介”的独立段落。
     for profile in soup.find_all("mp-common-profile"):
         nickname = profile.get("data-nickname", "").strip()

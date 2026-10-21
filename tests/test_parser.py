@@ -53,6 +53,8 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/h6dpymC-R3dyqtzRKhebSg",
     # 全屏文字正文：外层 content_noencode 为空，正文在 text_page_info 中。
     "https://mp.weixin.qq.com/s/YaROYW-2DD-0jOFkE5JCyQ",
+    # 纯红包封面组件正文。
+    "https://mp.weixin.qq.com/s/CgWnsf3lyBijzy3L5Y7Xtg",
 ]
 
 
