@@ -5,13 +5,14 @@ from __future__ import annotations
 import base64
 import html as html_module
 import json
+import math
 import re
 from collections import deque
 from dataclasses import replace
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import httpx
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 from markdownify import MarkdownConverter
 
 from .models import AccountType, ArticleDisplayType, ArticleResult, ArticleURLType, WeChatVerifyError
@@ -57,6 +58,10 @@ class _MarkdownConverter(MarkdownConverter):
 def _prepare_markdown_soup(html: str) -> BeautifulSoup:
     """展开编辑器产生的冗余行内标签，避免 Markdown 转换时递归超限。"""
     soup = BeautifulSoup(html, "html.parser")
+    # 脚本正文等兜底路径也可能包含无来源图片，不能生成 ![]() 冒充有效正文。
+    for img in soup.find_all("img"):
+        if not img.get("src", "").strip():
+            img.decompose()
     styles = {
         "strong": "bold", "b": "bold",
         "em": "italic", "i": "italic",
@@ -552,6 +557,193 @@ def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
 # 内容提取
 # ---------------------------------------------------------------------------
 
+def _svg_numbers(value: str) -> tuple[float, ...]:
+    """读取有限数值坐标，不求值单位或表达式。"""
+    try:
+        numbers = tuple(float(part) for part in re.split(r"[\s,]+", value.strip()))
+    except ValueError:
+        return ()
+    return numbers if all(math.isfinite(number) for number in numbers) else ()
+
+
+def _svg_viewport_size(element: Tag) -> tuple[float, ...]:
+    """读取最近 SVG 的用户坐标范围，不猜测依赖外部 CSS 的尺寸。"""
+    viewport = element.find_parent("svg")
+    if viewport is None:
+        return ()
+    if viewport.has_attr("viewbox"):
+        box = _svg_numbers(viewport["viewbox"])
+        if len(box) == 4 and box[:2] == (0, 0) and box[2] > 0 and box[3] > 0:
+            return box[2:]
+        return ()
+    width = _svg_numbers(viewport.get("width", ""))
+    height = _svg_numbers(viewport.get("height", ""))
+    if len(width) == len(height) == 1 and width[0] > 0 and height[0] > 0:
+        return width + height
+    return ()
+
+
+def _svg_dimension(element: Tag, key: str) -> tuple[float, ...]:
+    value = element.get(key, "").strip()
+    if not value.endswith("%"):
+        return _svg_numbers(value)
+    percentage = _svg_numbers(value[:-1])
+    viewport = _svg_viewport_size(element)
+    if len(percentage) != 1 or not viewport:
+        return ()
+    return (percentage[0] / 100 * viewport[0 if key == "width" else 1],)
+
+
+def _svg_frame_omissions(svg: Tag, media: list[tuple[Tag, Tag]]) -> set[int]:
+    """仅缩减可确认的快速等距帧序列；慢速轮播及不明结构保留全部图片。"""
+    omitted: set[int] = set()
+    for animation in svg.find_all("animatetransform"):
+        if (
+            animation.get("attributename", "").lower() != "transform"
+            or animation.get("type", "").lower() != "translate"
+            or animation.get("calcmode", "").lower() != "discrete"
+            or animation.get("repeatcount") != "indefinite"
+            or any(animation.has_attr(key) for key in ("href", "xlink:href", "keytimes", "additive", "accumulate"))
+        ):
+            continue
+        duration = re.fullmatch(r"(\d+(?:\.\d+)?)(ms|s)", animation.get("dur", ""))
+        if duration is None:
+            continue
+        seconds = float(duration[1]) / (1000 if duration[2] == "ms" else 1)
+        values = animation.get("values", "").strip().removesuffix(";")
+        offsets = [_svg_numbers(value) for value in values.split(";")]
+        if len(offsets) < 3 or any(len(value) != 2 for value in offsets):
+            continue
+        # 连续重复坐标表示停留，不是额外图片；末尾分号也不代表空帧。
+        steps = [offset for i, offset in enumerate(offsets) if i == 0 or offset != offsets[i - 1]]
+        # 较慢的逐页切换仍按轮播处理，避免丢失每页内容。
+        if len(steps) < 3 or not 0 < seconds / len(steps) <= 0.2:
+            continue
+
+        group = animation.parent
+        descendants = {id(tag) for tag in group.find_all(True)}
+        frames = [(index, element) for index, (element, _) in enumerate(media) if id(element) in descendants]
+        if len(frames) < len(steps):
+            continue
+        geometry = []
+        for _, element in frames:
+            owner = element if element.name != "img" else element.find_parent("foreignobject")
+            if owner is None:
+                break
+            # 不猜测额外坐标变换后的图片位置。
+            ancestry = [owner]
+            parent = owner.parent
+            while parent is not None and parent is not group:
+                ancestry.append(parent)
+                parent = parent.parent
+            if parent is None or any(
+                tag.has_attr("transform") or re.search(
+                    r"(?:^|;)\s*(?:-webkit-)?(?:transform|translate|rotate|scale)\s*:",
+                    tag.get("style", ""), re.I,
+                ) for tag in ancestry
+            ):
+                break
+            values = [_svg_numbers(owner.get(key, "0")) for key in ("x", "y")]
+            values += [_svg_dimension(owner, key) for key in ("width", "height")]
+            if any(len(value) != 1 for value in values):
+                break
+            geometry.append(tuple(value[0] for value in values))
+        if len(geometry) != len(frames):
+            continue
+        x, y, width, height = geometry[0]
+        if (x, y) != (0, 0) or width <= 0 or height <= 0:
+            continue
+        horizontal = all(box == (i * width, 0, width, height) for i, box in enumerate(geometry))
+        vertical = all(box == (0, i * height, width, height) for i, box in enumerate(geometry))
+        if not (horizontal or vertical):
+            continue
+        if any(offset != (-box[0], -box[1]) for offset, box in zip(steps, geometry)):
+            continue
+        # 有些帧条带带有未播放的尾图；仅在视口恰好为一帧时确认它一直在屏外。
+        if len(steps) < len(frames):
+            viewport = group.find_parent("svg")
+            if _svg_viewport_size(group) != (width, height) or (
+                viewport.get("overflow", "").strip().lower() == "visible"
+                or re.search(r"(?:^|;)\s*overflow\s*:\s*visible\b", viewport.get("style", ""), re.I)
+            ):
+                continue
+        omitted.update(index for index, _ in frames[1:])
+    return omitted
+
+
+def _replace_svg_content(soup: BeautifulSoup) -> None:
+    """保留 SVG 正文文字、图片及顺序，去除交互并对明确的帧序列仅取首帧。"""
+    # SVG 内的热区随容器移除；外层图片跳转只去掉链接，保留正文。
+    for link in soup.find_all("a"):
+        if link.find("svg") is not None:
+            link.unwrap()
+    for svg in [tag for tag in soup.find_all("svg") if tag.find_parent("svg") is None]:
+        # 定义、裁剪及遮罩中的资源不属于直接展示的正文。
+        for tag in list(svg.find_all(["defs", "clippath", "mask", "pattern", "symbol"])):
+            if tag.parent is not None:
+                tag.decompose()
+        media: list[tuple[Tag, Tag]] = []
+        for element in [svg, *svg.find_all(["svg", "image", "img"])]:
+            if element.name == "img":
+                media.append((element, soup.new_tag("img", attrs=element.attrs.copy())))
+                continue
+            if element.name == "image":
+                url = element.get("href") if element.has_attr("href") else element.get("xlink:href", "")
+                url = url.strip()
+                if url.lower().startswith(("http://", "https://")):
+                    media.append((element, soup.new_tag("img", src=_normalize_image_url(url))))
+                continue
+            for background in re.finditer(
+                r"(?:^|;)\s*background(?:-image)?\s*:\s*([^;]*)", element.get("style", ""), re.I,
+            ):
+                for match in re.finditer(
+                    r'''url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s'"()]*))\s*\)''', background[1], re.I,
+                ):
+                    url = next(value for value in match.groups() if value is not None).strip()
+                    if url.lower().startswith(("http://", "https://")):
+                        media.append((element, soup.new_tag("img", src=_normalize_image_url(url))))
+
+        omitted = _svg_frame_omissions(svg, media)
+        replacements: dict[int, tuple[Tag, list[Tag]]] = {}
+        for index, (element, image) in enumerate(media):
+            _, images = replacements.setdefault(id(element), (element, []))
+            if index not in omitted:
+                images.append(image)
+        for element, images in replacements.values():
+            if element.name == "svg":
+                # 背景先于 SVG 内部内容；容器稍后展开，保留其正文文字。
+                for image in reversed(images):
+                    element.insert(0, image)
+            elif images:
+                element.replace_with(*images)
+            else:
+                element.decompose()
+
+        # SVG <image> 的无效地址没有进入 media，也必须移除。
+        for tag in list(svg.find_all([
+            "image", "animate", "animatetransform", "animatemotion", "set",
+            "rect", "path", "circle", "ellipse", "line", "polyline", "polygon",
+            "title", "desc", "metadata", "script", "style", "use",
+        ])):
+            if tag.parent is not None:
+                tag.decompose()
+        for text in svg.find_all("text"):
+            paragraph = soup.new_tag("p")
+            for node in text.descendants:
+                if isinstance(node, Tag) and node.name == "tspan" and (
+                    node.has_attr("y") or _svg_numbers(node.get("dy", "0")) not in ((), (0,))
+                ) and paragraph.get_text(strip=True):
+                    paragraph.append(soup.new_tag("br"))
+                elif type(node) is NavigableString:
+                    paragraph.append(str(node))
+            text.replace_with(paragraph)
+        for tag in svg.find_all(["a", "g", "foreignobject", "svg"]):
+            tag.unwrap()
+        # 不以初始隐藏状态过滤图片；延迟显示、点击展开的素材直接展示。
+        # 几何遮罩、动画控制和空热区不生成正文，重复图片仅在 images 字段去重。
+        svg.unwrap()
+
+
 def _replace_vote_cards(soup: BeautifulSoup) -> None:
     """将投票属性中的题目和选项转换为正文，保留组件所在位置。"""
     for card in soup.find_all("mp-common-vote"):
@@ -661,44 +853,7 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
     for tag in to_remove:
         tag.decompose()
 
-    # SVG 可通过 background/background-image 或 foreignObject 内的 <img> 承载正文图片。
-    # 按文档顺序收集两种图片，再统一替换外层 SVG，避免删除内部正文图片。
-    to_remove = []
-    for svg in soup.find_all("svg", recursive=True):
-        # 跳过已被外层 SVG 处理过的嵌套 SVG（已脱离文档树）
-        if not svg.parent:
-            continue
-        # 跳过嵌套在其他 SVG 内的 SVG，由外层统一处理
-        if svg.find_parent("svg"):
-            continue
-
-        # 包含所有嵌套 SVG 和普通图片，保留正文中的重复图片及 alt 文本。
-        image_elements = [svg] + svg.find_all(["svg", "img"])
-        img_tags = []
-        for element in image_elements:
-            if element.name == "img":
-                img_tags.append(soup.new_tag("img", attrs=element.attrs.copy()))
-                continue
-            style = element.get("style", "")
-            # 限定背景属性，兼容简写中的颜色、位置及单引号、双引号、无引号 URL。
-            for background in re.finditer(
-                r"(?:^|;)\s*background(?:-image)?\s*:\s*([^;]*)", style, re.I,
-            ):
-                for match in re.finditer(
-                    r'''url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s'"()]*))\s*\)''',
-                    background.group(1), re.I,
-                ):
-                    url = next(value for value in match.groups() if value is not None).strip()
-                    if url.lower().startswith(("http://", "https://")):
-                        normalized = _normalize_image_url(url)
-                        img_tags.append(soup.new_tag("img", src=normalized))
-
-        if img_tags:
-            svg.replace_with(*img_tags)
-        else:
-            to_remove.append(svg)
-    for tag in to_remove:
-        tag.decompose()
+    _replace_svg_content(soup)
 
     # 从最终正文收集图片，使列表顺序与 Markdown 一致，并只对列表去重。
     seen: set[str] = set()

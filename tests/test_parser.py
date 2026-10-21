@@ -40,6 +40,17 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/mK2qOjQj2A876oFvCbrkMw",
     # SVG background 简写承载的纯图片正文。
     "https://mp.weixin.qq.com/s/H5ha97NIlv5A5SQU82aEbA",
+    # SVG image、轮播及逐帧动画混合的纯图片正文。
+    "https://mp.weixin.qq.com/s/puKT9PH2lETyjU8M-4NrCw",
+    # SVG 动画末帧停留、百分比尺寸及正文文字。
+    "https://mp.weixin.qq.com/s/yd851bOjXzNv0bp-Sp8oqg",
+    "https://mp.weixin.qq.com/s/hVjlH4CiLWQYxI_ZSyQojA",
+    "https://mp.weixin.qq.com/s/n6GGE5uA795odtE5Fbe8GA",
+    # SVG 轮播、背景图及混合投票正文。
+    "https://mp.weixin.qq.com/s/e9Lpa-HVmINKcx8pjL4kkg",
+    "https://mp.weixin.qq.com/s/FmXMcfv2LS_ngCqOOkCbCA",
+    "https://mp.weixin.qq.com/s/8g48CiK5LhMISdcTDijmog",
+    "https://mp.weixin.qq.com/s/h6dpymC-R3dyqtzRKhebSg",
 ]
 
 
