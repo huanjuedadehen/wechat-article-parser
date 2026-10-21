@@ -458,6 +458,68 @@ def _extract_account_type(script_text: str, result: ArticleResult) -> None:
             result.mp_account_type = account_type
 
 
+def _extract_text_page_strings(script_text: str) -> list[tuple[str, str]]:
+    """读取当前 cgiDataNew.text_page_info 的直接正文属性，跳过其他层级及表达式。"""
+    if "cgiDataNew" not in script_text or "text_page_info" not in script_text:
+        return []
+    tokens = [match.group() for match in _JS_DATA_TOKEN_RE.finditer(script_text)
+              if match.lastgroup != "comment"]
+    stack: list[str] = []
+    in_text_page = False
+    pending: list[tuple[str, str]] = []
+    results: list[tuple[str, str]] = []
+    for i, token in enumerate(tokens):
+        if not stack:
+            if (
+                token == "{"
+                and tokens[max(0, i - 4):i] == ["window", ".", "cgiDataNew", "="]
+                and (i < 5 or tokens[i - 5] != ".")
+            ):
+                stack.append(token)
+            continue
+        if token in ("{", "[", "("):
+            if (
+                token == "{" and stack == ["{"] and i >= 3
+                and tokens[i - 3] in ("{", ",")
+                and tokens[i - 2].strip("\"'") == "text_page_info" and tokens[i - 1] == ":"
+            ):
+                in_text_page = True
+                pending = []
+            stack.append(token)
+        elif token in ("}", "]", ")"):
+            if stack[-1] != {"}": "{", "]": "[", ")": "("}[token]:
+                stack.clear()
+                in_text_page = False
+                pending = []
+                continue
+            if in_text_page and stack == ["{", "{"]:
+                results.extend(pending)
+                in_text_page = False
+            stack.pop()
+        elif (
+            in_text_page and stack == ["{", "{"] and tokens[i - 1] in ("{", ",")
+            and token.strip("\"'") in ("content_noencode", "content")
+            and tokens[i + 1:i + 2] == [":"]
+        ):
+            value_index = i + 2
+            wrapped = tokens[value_index:value_index + 2] == ["JsDecode", "("]
+            if wrapped:
+                value_index += 2
+            if value_index >= len(tokens):
+                continue
+            value = tokens[value_index]
+            if len(value) < 2 or value[0] not in ("'", '"') or value[-1] != value[0]:
+                continue
+            end = value_index + 1
+            if wrapped:
+                if tokens[end:end + 1] != [")"]:
+                    continue
+                end += 1
+            if tokens[end:end + 1] in ([","], ["}"]):
+                pending.append((token.strip("\"'"), value[1:-1]))
+    return results
+
+
 def _extract_rich_text_meta(script_text: str, result: ArticleResult) -> None:
     """从富文本文章的 script 标签中提取元数据。"""
     _extract_account_type(script_text, result)
@@ -963,34 +1025,31 @@ def _extract_fullscreen_content(soup: BeautifulSoup, result: ArticleResult) -> N
     此类文章的文本存储在 text_page_info.content 中，通过 JsDecode() 编码；
     图片存储在 picture_page_info_list 的 cdn_url 字段中。
     """
+    images: list[str] = []
+    seen: set[str] = set()
+    candidates: dict[str, list[str]] = {"content_noencode": [], "content": []}
     for script in soup.find_all("script", attrs={"type": "text/javascript"}):
-        if "picture_page_info_list" not in script.text:
-            continue
+        # 图片和正文可能分布在不同脚本中，空对象或引用脚本不能终止提取。
+        for url in _extract_picture_cdn_urls(script.text):
+            if url not in seen:
+                seen.add(url)
+                images.append(url)
+        for field, value in _extract_text_page_strings(script.text):
+            candidates[field].append(value)
 
-        html_parts: list[str] = []
-
-        # 从 picture_page_info_list 中提取图片
-        result.images = _extract_picture_cdn_urls(script.text)
-        for img in result.images:
-            html_parts.append(f'<img src="{img}" /><br>')
-
-        # 从 text_page_info.content_noencode 或 content 中提取文本
-        # 文本可能被 JsDecode('...') 包裹，也可能是裸的单引号字符串，两种都要兼容
-        for field in ("content_noencode", "content"):
-            m = re.search(
-                rf"{field}:\s*(?:JsDecode\(\s*)?'(.*?)'",
-                script.text,
-                re.DOTALL,
-            )
-            if m:
-                text = _decode_text(m.group(1), preserve_newlines=True)
-                text = unquote(text)
-                html_parts.append(f"<p>{text}</p>")
-                break
-
-        if html_parts:
-            result.article_markdown = _to_markdown_plain("".join(html_parts))
-        return
+    result.images = images
+    image_html = "".join(f'<img src="{url}"><br>' for url in images)
+    parts = [_to_markdown_plain(image_html).strip()] if images else []
+    for field in ("content_noencode", "content"):
+        for value in candidates[field]:
+            # 先解码 JS 字符串，再处理 HTML 实体和换行，避免截断转义引号。
+            text = unquote(html_module.unescape(_decode_js_string(value)))
+            text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+            markdown = _to_markdown_plain(f"<p>{text}</p>").strip()
+            if markdown:
+                result.article_markdown = "\n\n".join([*parts, markdown])
+                return
+    result.article_markdown = "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
