@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import html as html_module
+import json
 import re
 from collections import deque
 from dataclasses import replace
@@ -551,6 +552,54 @@ def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
 # 内容提取
 # ---------------------------------------------------------------------------
 
+def _replace_vote_cards(soup: BeautifulSoup) -> None:
+    """将投票属性中的题目和选项转换为正文，保留组件所在位置。"""
+    for card in soup.find_all("mp-common-vote"):
+        try:
+            subjects = json.loads(card.get("data-votesubject", ""))
+        except (json.JSONDecodeError, TypeError):
+            subjects = []
+        if not isinstance(subjects, list):
+            subjects = []
+
+        blocks = []
+        for subject in subjects:
+            if not isinstance(subject, dict):
+                continue
+            title = subject.get("title")
+            title = title.strip() if isinstance(title, str) else ""
+            options = subject.get("options")
+            names = []
+            if isinstance(options, list):
+                for option in options:
+                    name = option.get("name") if isinstance(option, dict) else None
+                    if isinstance(name, str) and name.strip():
+                        names.append(name.strip())
+            if not title and not names:
+                continue
+
+            paragraph = soup.new_tag("p")
+            heading = soup.new_tag("strong")
+            heading.string = f"投票：{title}" if title else "投票"
+            paragraph.append(heading)
+            blocks.append(paragraph)
+            if names:
+                options_list = soup.new_tag("ul")
+                for name in names:
+                    item = soup.new_tag("li")
+                    item.string = name
+                    options_list.append(item)
+                blocks.append(options_list)
+
+        if blocks:
+            # 替换整个组件，避免重复输出已有的渲染内容。
+            card.replace_with(*blocks)
+        elif not card.get_text(strip=True):
+            notice = soup.new_tag("p")
+            notice.string = "投票内容，请在微信中查看。"
+            card.replace_with(notice)
+
+
 def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None:
     """将 rich_media_content 区块转换为 Markdown。"""
     # prettify 会在行内标签之间插入空白，改变代码和引用链接的内容。
@@ -597,6 +646,8 @@ def _extract_rich_media_content(content_tag: Tag, result: ArticleResult) -> None
         notice.string = "请在微信中打开小程序查看内容。"
         paragraphs.append(notice)
         card.replace_with(*paragraphs)
+
+    _replace_vote_cards(soup)
 
     # 处理 <img> 标签
     to_remove = []
