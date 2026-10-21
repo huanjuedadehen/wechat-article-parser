@@ -1,82 +1,29 @@
 # wechat-article-parser
 
-微信公众号文章解析器。传入一个公众号文章链接，自动抓取页面并提取公众号信息、文章元数据及正文的 Markdown 内容。
+微信公众号文章解析器。传入文章链接，提取公众号信息、文章元数据和 Markdown 正文，支持同步与异步调用。
 
-支持的文章类型：
+## 功能
 
-- 标准富文本文章
-- 转载式文章
-- 纯文本文章
-- 视频分享类文章
-- 音频分享类文章
-- 小红书风格图片轮播文章
-- 全屏布局短文本文章
-
-解析时优先读取页面全局的 `item_show_type`：`0` 对应图文、`5` 对应视频分享、`7` 对应音频分享、
-`8` 对应图片轮播、`10` 对应文字消息，再通过 HTML 或脚本数据区分具体模板。
-类型字段缺失、值未知或对应分支未提取到正文时，会按原有 HTML 特征匹配顺序兜底。
-图文通过全屏脚本兜底提取正文时，也会读取富文本元数据。
-全屏文字正文只读取 `cgiDataNew.text_page_info` 的直接属性，优先 `content_noencode`，
-为空或无法提取可见正文时尝试 `content`；不会误取外层或嵌套卡片中的同名字段。
-图片和文字可以位于不同脚本中，正文中的转义引号和换行会正常解码。
-
-Markdown 转换前会展开无格式作用的 `span`，合并嵌套的重复加粗、斜体和删除线标签，
-避免编辑器产生的数百层冗余行内标签导致递归超限，并保留文字、链接、图片和段落顺序。
-SVG 正文图片支持 `background`、`background-image` 中的 HTTP(S) 地址（有引号或无引号）、
-`foreignObject` 内的图片，以及 `<image href="…">` / `<image xlink:href="…">`。
-静态图、轮播图和缩放动画图按原顺序保留，延迟显示或点击展开的图片直接展示；
-SVG 图片的跳转链接、交互遮罩和动画控制不输出，无来源的空图片不生成 Markdown。
-对于明确的快速逐帧序列，仅保留第一帧：当前识别等尺寸图片按横向或纵向等距排列，
-由循环的 `discrete` 平移动画按相同坐标依次切换，且总时长除以不同连续位置数不超过 0.2 秒的结构。
-支持动画序列末尾分号、重复坐标停留，以及由最近 SVG 的 `viewBox` 或明确尺寸解析的百分比宽高；
-未播放的尾图只在确认视口恰好容纳一帧时省略。
-也支持由直接外层 `foreignObject` 定位的背景 SVG，以及帧间距大于图片尺寸的排列；
-后者必须能确认视口可容纳当前帧且不会同时展示相邻帧。
-有额外变换、指定关键时间点等无法确认的动画，以及 CSS/JavaScript 动画，保留全部可提取图片。
-`images` 只包含最终保留的图片并按顺序去重；除上述帧序列缩减外，Markdown 保留原文重复图片。
-SVG `<text>` / `<tspan>` 中的正文和 `foreignObject` 中的 HTML 正文也按原顺序保留，
-其中链接仅保留文字或图片；定义、遮罩及辅助标题/说明不作为正文输出。
-
-图文正文仅包含视频号视频卡片或微信视频 iframe 时，Markdown 返回“这是一篇纯视频内容。”。
-正文只有付费预览占位标签时，Markdown 返回“这是一篇付费内容，正文需付费后查看。”，
-并保留公开元数据；已有的可见预览正文仍正常提取。
-返回字段 `article_is_paid` 独立标记文章是否付费，有可见预览正文时也会识别。
-图文中的公众号推荐卡片按原文顺序转换为 `**公众号名称**：简介`，每张卡片一段；
-名称或简介缺失时，仅输出已有字段。
-图文正文仅包含商品广告卡片（`mp-common-cpsad`）时，Markdown 返回“这是一篇商品推荐内容。”；
-已有的文字和图片仍正常提取。关键元数据完整时占位结果也有效，不表示已获取商品详情。
-小程序卡片（`mp-common-miniprogram`）按原文顺序转换为加粗标题、`小程序：名称`及
-“请在微信中打开小程序查看内容。”，标题或名称缺失时省略对应段落。
-小程序卡片的封面和头像不输出到 Markdown，也不加入 `images`；不生成小程序内部路径链接。
-关键元数据完整时卡片结果也有效，不表示已获取小程序内的文档或其他内容。
-红包封面组件（`mp-common-redpacket`）按原文位置替换为一行“红包封面，请在微信中查看。”；
-不展示名称、预览图片或领取链接，预览图片也不加入 `images`。有效结果不表示封面仍可领取。
-投票组件（`mp-common-vote`）按原文顺序转换为加粗题目及选项列表，支持多题和多个组件；
-不输出票数或推断单选、多选类型。投票数据缺失或异常时保留组件已有文字，无文字则返回
-“投票内容，请在微信中查看。”。关键元数据完整时占位结果也有效，不表示已获取完整投票内容或实时结果。
+- 支持微信文章短链接和长链接。
+- 支持标准图文、转载式文章、纯文本、视频与音频分享、图片轮播及全屏布局短文本。
+- 提取标题、作者公众号、摘要、封面、发布时间、付费标记等信息，返回结构化数据。
+- 将正文转换为 Markdown，提取正文图片链接，支持 SVG 内嵌图片和文字。
+- 将投票、公众号推荐、小程序、红包封面等组件转换为可读文字或查看提示。
+- 支持请求超时、自定义 User-Agent、代理和按需返回原始 HTML。
 
 ## 安装
 
-```bash
-pip install wechat-article-parser
-```
-
-**本地开发安装：**
+需要 **Python 3.10+**。
 
 ```bash
-git clone https://github.com/huanjuedadehen/wechat-article-parser.git
-cd wechat-article-parser
-pip install -e ".[dev]"
+python -m pip install wechat-article-parser
 ```
 
-依赖项（会自动安装）：
+`httpx`、`beautifulsoup4` 和 `markdownify` 会随包自动安装。
 
-- Python >= 3.10
-- httpx
-- beautifulsoup4
-- markdownify
+## 快速开始
 
-## 使用方式
+将以下示例中的 URL 替换为实际文章链接。
 
 ### 同步调用
 
@@ -84,238 +31,92 @@ pip install -e ".[dev]"
 from wechat_article_parser import parse
 
 result = parse("https://mp.weixin.qq.com/s/xxxxx")
-print(result.article_title)
-print(result.article_markdown)
+
+if result.is_valid:
+    print(result.article_title)
+    print(result.mp_name)
+    print(result.article_markdown)
+    print(result.images)
+else:
+    print("部分关键字段未能解析，请检查返回结果")
 ```
 
 ### 异步调用
 
 ```python
+import asyncio
+
 from wechat_article_parser import parse_async
 
-result = await parse_async("https://mp.weixin.qq.com/s/xxxxx")
-print(result.article_title)
-print(result.article_markdown)
+
+async def main():
+    result = await parse_async("https://mp.weixin.qq.com/s/xxxxx")
+    if result.is_valid:
+        print(result.article_title)
+        print(result.article_markdown)
+    else:
+        print("部分关键字段未能解析，请检查返回结果")
+
+
+asyncio.run(main())
 ```
 
-### 可选参数
+### 请求选项
 
-两个方法都支持以下可选参数：
-
-- `timeout`：请求超时时间，单位秒，默认 15
-- `user_agent`：自定义 User-Agent，不传则使用内置默认值
-- `proxy`：HTTP/HTTPS 代理地址，不传则直连
-- `include_raw_html`：是否在返回结果中带上原始 HTML 网页源代码，默认 `False`
+两个接口均支持以下关键字参数：
 
 ```python
-result = parse(
-    "https://mp.weixin.qq.com/s/xxxxx",
-    timeout=30,
-    user_agent="MyBot/1.0",
-    proxy="http://user:pass@127.0.0.1:7890",
-    include_raw_html=True,
-)
-```
-
-### 长链接
-
-同步和异步接口均支持短链接 `/s/<22位文章ID>` 和长链接 `/s?__biz=...&mid=...&idx=...&sn=...&chksm=...`。
-根据原始输入 URL 识别链接类型：协议须为 HTTP/HTTPS，域名须为 `mp.weixin.qq.com`。
-长链接路径须为 `/s`，且 `__biz`、`mid`、`idx`、`sn`、`chksm` 五个查询参数必须都存在且有值，
-空字符串或纯空白不算有效值；重复参数中的每个值也须非空白。额外查询参数和片段不影响识别。
-未满足识别条件时，`article_url_type` 为 `unknown`，仍尝试解析页面，不额外抛出链接校验异常。
-
-长链接返回的 `article_id` 为空，其他字段继续从页面提取。
-只有识别为 `long` 时，`is_valid` 才允许缺少 `article_id`。
-
-## 返回结构
-
-`parse` 和 `parse_async` 均返回 `ArticleResult` 数据类，包含以下字段：
-
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `mp_id_b64` | `str` | 公众号 ID（Base64 编码原始值） |
-| `mp_id` | `int` | 公众号 ID（解码后的整数） |
-| `mp_name` | `str` | 公众号名称 |
-| `mp_alias` | `str` | 公众号别名 |
-| `mp_user_name` | `str` | 公众号用户名（如 `aifaner383402` 或 `gh_9a1919baf888`），未获取到时为空字符串 |
-| `mp_image` | `str` | 公众号头像链接 |
-| `mp_description` | `str` | 公众号简介 |
-| `mp_account_type` | `AccountType` | 账号类型：`AccountType.SUBSCRIPTION`（订阅号）/ `AccountType.SERVICE`（服务号）/ `AccountType.UNKNOWN`（未识别） |
-| `article_id` | `str` | 短链接中的文章 ID；长链接为空字符串 |
-| `article_url_type` | `ArticleURLType` | 输入链接类型：`short`、`long` 或 `unknown`（默认）；可从包顶层导入枚举，支持字符串比较和 JSON 序列化 |
-| `article_msg_id` | `int` | 文章所在的群发消息 ID |
-| `article_idx` | `int` | 群发图文中的位置（从 1 开始） |
-| `article_sn` | `str` | 文章签名（防伪校验） |
-| `article_title` | `str` | 文章标题 |
-| `article_cover_image` | `str` | 文章封面图链接 |
-| `article_description` | `str` | 文章摘要 |
-| `article_markdown` | `str` | 文章正文的 Markdown 内容；视频或音频分享没有文字附言时可为空 |
-| `article_publish_time` | `int` | 发布时间（Unix 时间戳） |
-| `article_is_paid` | `bool` | 是否检测到当前文章的付费标记，默认 `False`；不表示是否已获取付费全文 |
-| `article_display_type` | `ArticleDisplayType` | 文章展示类型：`article`、`video`、`audio`、`image`、`text` 或 `unknown` |
-| `article_item_show_type` | `int \| None` | 微信页面中的原始展示类型：`0` 图文、`5` 视频、`7` 音频、`8` 图片轮播、`10` 文字；其他已提取的数值原样保留，缺失或无法解析时为 `None` |
-| `raw_html` | `str` | 原始 HTML 网页源代码（仅在 `include_raw_html=True` 时填充，否则为空字符串） |
-| `images` | `list[str]` | 文章中提取的所有图片链接 |
-| `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
-
-`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type in ("video", "audio")`。
-此外，`article_url_type == "long"` 时允许 `article_id` 为空；短链接和未识别链接仍要求 `article_id` 非空。
-视频和音频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频或音频文件。
-
-付费受限页面返回提示且关键元数据完整时，`is_valid` 也为 `True`，这不表示已获取付费正文。
-
-### 判断是否为付费文章
-
-```python
-result = parse("https://mp.weixin.qq.com/s/xxxxx")
-print(result.article_is_paid)  # True：识别为付费文章
-```
-
-`article_is_paid` 根据页面全局或 `window.cgiDataNew` 直接属性中的 `is_pay_subscribe`，
-以及正文中的 `mp-pay-preview-filter` 标签识别；未检测到付费标记时返回 `False`。
-该字段包含在 `dataclasses.asdict(result)` 中，JSON 序列化为布尔值。
-有可见预览或可访问正文的付费文章仍返回 `True`，正文按原有逻辑提取。
-
-### 判断文章展示类型
-
-`ArticleDisplayType` 是字符串枚举，既支持枚举比较，也支持语义字符串比较：
-
-| 枚举 | 字符串值 | 含义 |
-|---|---|---|
-| `ArticleDisplayType.ARTICLE` | `article` | 图文，包括转载式 |
-| `ArticleDisplayType.VIDEO` | `video` | 视频分享 |
-| `ArticleDisplayType.AUDIO` | `audio` | 音频分享 |
-| `ArticleDisplayType.IMAGE` | `image` | 图片轮播 |
-| `ArticleDisplayType.TEXT` | `text` | 文字消息 |
-| `ArticleDisplayType.UNKNOWN` | `unknown` | 页面类型缺失或未支持 |
-
-```python
-from wechat_article_parser import parse, ArticleDisplayType
-
-result = parse("https://mp.weixin.qq.com/s/xxxxx")
-if result.article_display_type == ArticleDisplayType.VIDEO:
-    print("这是视频分享")
-
-if result.article_display_type == "video":
-    print("视频分享可以没有文字正文")
-
-print(result.article_display_type)  # 例如 video
-print(result.article_item_show_type)  # 例如 5
-```
-
-`article_display_type` 是返回结果中的数据字段，包含在 `dataclasses.asdict(result)` 中，JSON 序列化时输出语义字符串。
-`article_item_show_type` 返回微信页面中 `item_show_type` 的原始数值，也包含在 `dataclasses.asdict(result)` 中；JSON 序列化时输出数字或 `null`。
-
-### 判断账号类型
-
-`AccountType` 继承自 `str` 枚举，既支持枚举比较，也支持与中文字符串直接比较：
-
-```python
-from wechat_article_parser import parse, AccountType
-
-result = parse("https://mp.weixin.qq.com/s/xxxxx")
-
-# 推荐：枚举比较（有类型提示与 IDE 补全）
-if result.mp_account_type == AccountType.SERVICE:
-    print("这是服务号")
-
-# 也支持：字符串字面量比较
-if result.mp_account_type == "服务号":
-    print("这是服务号")
-
-# 打印直接输出中文值
-print(f"账号类型: {result.mp_account_type}")  # 账号类型: 订阅号
-```
-
-## 异常处理
-
-### WeChatVerifyError
-
-当请求频率过高或 IP 被限流时，微信会返回验证码页面而非文章内容。此时会抛出 `WeChatVerifyError`：
-
-```python
-from wechat_article_parser import parse, WeChatVerifyError
-
-try:
-    result = parse("https://mp.weixin.qq.com/s/xxxxx")
-except WeChatVerifyError:
-    print("触发了微信人机验证，请稍后重试或更换 IP")
-```
-
-### httpx.HTTPStatusError
-
-当 HTTP 请求返回非 2xx 状态码时，会抛出 `httpx.HTTPStatusError`：
-
-```python
-import httpx
 from wechat_article_parser import parse
 
-try:
-    result = parse("https://mp.weixin.qq.com/s/xxxxx")
-except httpx.HTTPStatusError as e:
-    print(f"请求失败: {e.response.status_code}")
+result = parse(
+    "https://mp.weixin.qq.com/s/xxxxx",
+    timeout=30,                    # 默认 15 秒
+    user_agent="MyBot/1.0",         # 默认使用内置 User-Agent
+    proxy="http://127.0.0.1:7890",  # 可选，显式指定代理
+    include_raw_html=True,          # 默认 False
+)
+print(result.raw_html)
 ```
 
-### 解析不完整
+## 返回结果
 
-缺少标题、发布时间等关键字段，或非视频/音频分享缺少正文时，解析结果的 `is_valid` 会返回 `False`。封面图、摘要等非必填字段为空不影响有效性。建议在业务逻辑中检查：
+两个接口均返回 `ArticleResult` 数据类，常用字段如下：
 
-```python
-result = parse("https://mp.weixin.qq.com/s/xxxxx")
-if not result.is_valid:
-    print("部分关键字段未能解析")
-```
+| 字段 | 说明 |
+|---|---|
+| `article_title` / `article_description` | 文章标题 / 摘要 |
+| `article_markdown` | Markdown 正文 |
+| `article_publish_time` | 发布时间，Unix 时间戳 |
+| `article_cover_image` / `images` | 封面链接 / 最终保留的正文图片链接列表 |
+| `mp_name` / `mp_user_name` | 公众号名称 / 用户名 |
+| `article_display_type` | `article`、`video`、`audio`、`image`、`text` 或 `unknown` |
+| `article_url_type` | 输入链接类型：`short`、`long` 或 `unknown` |
+| `article_is_paid` | 是否检测到付费标记 |
+| `is_valid` | 关键字段是否完整的计算属性 |
 
-## 测试
+完整字段、枚举、长链接识别条件及 JSON 序列化示例见 [API 参考](docs/api.md)。
 
-安装开发依赖：
+## 使用边界与错误处理
 
-```bash
-pip install -e ".[dev]"
-```
+- 基于页面 HTML 和已知脚本数据提取，不执行 JavaScript，不还原交互与视觉布局。图片返回链接，不下载媒体文件。
+- 明确识别的 SVG 快速逐帧动画仅保留首帧；轮播及无法确认的帧序列保留可提取图片。具体规则见[正文转换规则](docs/content-rules.md)。
+- 视频、音频分享可以没有文字附言。付费预览及部分卡片可能只返回文字提示；`is_valid=True` 不代表已获取付费全文、媒体文件或小程序内部内容。
+- 页面结构变化或内容不可访问时，可能返回不完整结果。调用方应检查 `is_valid`；长链接的 `article_id` 为空属于正常情况。
+- 检测到微信人机验证时抛出 `WeChatVerifyError`；HTTP 状态异常和网络错误通过 `httpx` 异常向外传播。接口不自动重试，处理示例见 [API 参考](docs/api.md#异常与不完整结果)。
 
-### 运行全部测试
+## 文档
 
-```bash
-pytest tests/test_parser.py -v -s
-```
+- [API 参考](docs/api.md)：参数、全部返回字段、枚举、有效性判断和异常处理。
+- [正文转换规则](docs/content-rules.md)：图片与动画、微信组件、页面模板与回退规则。
+- [开发指南](docs/development.md)：本地安装、项目结构、离线测试和真实链接调试。
+- [版本记录](https://github.com/huanjuedadehen/wechat-article-parser/releases)：各版本的发布说明。
 
-### 只运行同步 / 异步测试
+## 参与贡献
 
-```bash
-pytest tests/test_parser.py -v -s -k "sync"
-pytest tests/test_parser.py -v -s -k "async"
-```
+欢迎通过 [Issues](https://github.com/huanjuedadehen/wechat-article-parser/issues) 报告问题，或提交 Pull Request。
+请附上可复现的文章链接、版本信息和预期结果；修改解析行为时补充离线回归用例。
+开发环境和测试方法见[开发指南](docs/development.md)。
 
-### 测试单个链接 - 查看所有字段
+## 许可证
 
-```bash
-pytest tests/test_parser.py::test_fetch_all -s --url "https://mp.weixin.qq.com/s/xxxxx"
-```
-
-### 测试单个链接 - 只看 Markdown 内容
-
-```bash
-pytest tests/test_parser.py::test_fetch_markdown -s --url "https://mp.weixin.qq.com/s/xxxxx"
-```
-
-### 测试单个链接 - 打印原始 HTML 网页源代码
-
-```bash
-pytest tests/test_parser.py::test_fetch_raw_html -s --url "https://mp.weixin.qq.com/s/xxxxx"
-```
-
-### 通过 HTTP 代理运行测试
-
-所有测试命令都支持 `--proxy` 参数，传入后所有请求都会经由该代理；不传则直连。常用于 IP 被微信限流时换出口：
-
-```bash
-# 全量测试走代理
-pytest tests/test_parser.py -v -s --proxy "http://127.0.0.1:7890"
-
-# 测试单个链接走代理
-pytest tests/test_parser.py::test_fetch_all -s \
-  --url "https://mp.weixin.qq.com/s/xxxxx" \
-  --proxy "http://user:pass@127.0.0.1:7890"
-```
+本项目使用 [MIT License](LICENSE)。
