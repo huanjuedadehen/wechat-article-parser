@@ -50,6 +50,17 @@ def test_long_url_parses_without_article_id(scheme: str, suffix: str) -> None:
     assert result.is_valid
 
 
+@pytest.mark.parametrize("url", [_SHORT_URL, _LONG_URL])
+@pytest.mark.parametrize("declaration", ['var sn = "" || "" || "";', ""])
+def test_page_without_signature_is_valid(url: str, declaration: str) -> None:
+    html = _HTML.replace(f'var sn = "{_PARAMS["sn"]}";', declaration)
+    result = parser._parse_html(url, html)
+
+    assert result.article_sn == ""
+    assert result.article_markdown == "正文"
+    assert result.is_valid
+
+
 @pytest.mark.parametrize("key", _PARAMS)
 @pytest.mark.parametrize("value", [None, "", " \t\n"])
 def test_long_url_requires_each_parameter_with_value(key: str, value: str | None) -> None:

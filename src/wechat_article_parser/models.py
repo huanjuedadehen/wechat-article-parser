@@ -98,14 +98,13 @@ class ArticleResult:
 
     @property
     def is_valid(self) -> bool:
-        """检查关键字段是否解析成功；视频和音频分享允许正文为空。"""
+        """检查关键字段是否解析成功；签名可为空，视频和音频分享允许正文为空。"""
         return bool(
             self.mp_id
             and self.mp_name
             and (self.article_id or self.article_url_type == ArticleURLType.LONG)
             and self.article_msg_id
             and self.article_idx
-            and self.article_sn
             and self.article_title
             and (
                 self.article_markdown

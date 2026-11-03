@@ -22,11 +22,13 @@ _COMPLETE = ArticleResult(
 
 @pytest.mark.parametrize("display_type", list(ArticleDisplayType))
 @pytest.mark.parametrize("markdown", ["", "正文"])
+@pytest.mark.parametrize("signature", ["", "signature"])
 def test_only_video_and_audio_can_be_valid_without_markdown(
-    display_type: ArticleDisplayType, markdown: str,
+    display_type: ArticleDisplayType, markdown: str, signature: str,
 ) -> None:
     result = replace(
         _COMPLETE, article_display_type=display_type, article_markdown=markdown,
+        article_sn=signature,
     )
 
     assert result.is_valid is (
@@ -42,7 +44,6 @@ def test_only_video_and_audio_can_be_valid_without_markdown(
         ("article_id", ""),
         ("article_msg_id", 0),
         ("article_idx", 0),
-        ("article_sn", ""),
         ("article_title", ""),
         ("article_publish_time", 0),
     ],
@@ -103,12 +104,14 @@ def test_paid_field_serializes_as_boolean(is_paid: bool) -> None:
 @pytest.mark.parametrize("url_type", list(ArticleURLType))
 @pytest.mark.parametrize("display_type", list(ArticleDisplayType))
 @pytest.mark.parametrize("markdown", ["", "正文"])
+@pytest.mark.parametrize("signature", ["", "signature"])
 def test_only_long_url_can_omit_article_id(
-    url_type: ArticleURLType, display_type: ArticleDisplayType, markdown: str,
+    url_type: ArticleURLType, display_type: ArticleDisplayType, markdown: str, signature: str,
 ) -> None:
     result = replace(
         _COMPLETE, article_id="", article_url_type=url_type,
         article_display_type=display_type, article_markdown=markdown,
+        article_sn=signature,
     )
     assert result.is_valid is (
         url_type == ArticleURLType.LONG
@@ -120,7 +123,7 @@ def test_only_long_url_can_omit_article_id(
     ("field_name", "empty_value"),
     [
         ("mp_id", 0), ("mp_name", ""), ("article_msg_id", 0),
-        ("article_idx", 0), ("article_sn", ""), ("article_title", ""),
+        ("article_idx", 0), ("article_title", ""),
         ("article_publish_time", 0),
     ],
 )

@@ -86,7 +86,7 @@ result = parse(
 | `article_url_type` | `ArticleURLType` | 输入链接类型：`short`、`long` 或 `unknown`（默认）；可从包顶层导入枚举，支持字符串比较和 JSON 序列化 |
 | `article_msg_id` | `int` | 文章所在的群发消息 ID |
 | `article_idx` | `int` | 群发图文中的位置（从 1 开始） |
-| `article_sn` | `str` | 文章签名（防伪校验） |
+| `article_sn` | `str` | 文章签名（防伪校验）；页面未提供时为空字符串，不影响 `is_valid` |
 | `article_title` | `str` | 文章标题 |
 | `article_cover_image` | `str` | 文章封面图链接 |
 | `article_description` | `str` | 文章摘要 |
@@ -99,7 +99,8 @@ result = parse(
 | `images` | `list[str]` | 最终保留的正文图片链接，按顺序去重；不包含被省略的动画帧、小程序封面和头像、红包封面预览图 |
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
 
-`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_msg_id`、`article_idx`、`article_sn`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type in ("video", "audio")`。
+`is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_msg_id`、`article_idx`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type in ("video", "audio")`。
+`article_sn` 为非必需字段，页面未提供签名时仍可返回有效结果；这不改变输入长链接的参数要求，详见[链接识别](#链接识别)。
 此外，`article_url_type == "long"` 时允许 `article_id` 为空；短链接和未识别链接仍要求 `article_id` 非空。
 视频和音频分享允许没有文字正文，仍须满足其他关键字段要求；有效性不表示已获取视频或音频文件。
 

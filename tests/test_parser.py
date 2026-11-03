@@ -57,6 +57,8 @@ TEST_URLS = [
     "https://mp.weixin.qq.com/s/CgWnsf3lyBijzy3L5Y7Xtg",
     # foreignObject 定位且帧间距大于图片尺寸的 SVG 背景帧序列。
     "https://mp.weixin.qq.com/s/6pT1xECveLM7iTqiYvjH-g",
+    # 页面中的文章签名为空，但正文和其他关键元数据完整。
+    "https://mp.weixin.qq.com/s/skgpeibg1sbv2QFFdQeFxA",
 ]
 
 
@@ -131,7 +133,6 @@ def _assert_result(result: ArticleResult, url: str) -> None:
     assert result.article_id, "article_id should not be empty"
     assert result.article_msg_id > 0, "article_msg_id should be positive"
     assert result.article_idx > 0, "article_idx should be positive"
-    assert result.article_sn, "article_sn should not be empty"
     assert result.article_title, "article_title should not be empty"
     if result.article_display_type not in ("video", "audio"):
         assert result.article_markdown, "article_markdown should not be empty for non-video/audio articles"
