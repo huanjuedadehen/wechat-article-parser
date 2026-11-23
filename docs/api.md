@@ -54,6 +54,35 @@ result = parse(
 )
 ```
 
+### 只解析公众号资料
+
+```python
+from wechat_article_parser import AccountResult
+
+
+def parse_account(
+    url: str,
+    *,
+    timeout: int = 15,
+    user_agent: str | None = None,
+    proxy: str | None = None,
+) -> AccountResult: ...
+
+async def parse_account_async(
+    url: str,
+    *,
+    timeout: int = 15,
+    user_agent: str | None = None,
+    proxy: str | None = None,
+) -> AccountResult: ...
+```
+
+传入任一公众号文章链接，网络选项和异常行为与全文接口相同。仍需下载文章 HTML，本地只保留脚本节点，跳过文章元数据、正文 Markdown 和图片提取。
+优先读取图文页面的账号资料，数值 ID 或名称缺失时再读取分享页面的账号配置。
+
+`AccountResult` 只包含下表中的八个 `mp_` 字段，类型、含义和默认值见[返回结果](#返回结果)。
+取得 `mp_id` 和 `mp_name` 时，计算属性 `account.is_valid` 为 `True`。资料不完整时仍返回已取得的字段。
+
 ## 链接识别
 
 同步和异步接口均支持短链接 `/s/<22位文章ID>`（ID 由英文字母、数字、`_` 或 `-` 组成）和长链接 `/s?__biz=...&mid=...&idx=...&sn=...&chksm=...`。
@@ -200,7 +229,7 @@ print(f"账号类型: {result.mp_account_type}")  # 账号类型: 订阅号
 | 检测到微信验证码或人机验证页面 | 抛出 `WeChatVerifyError` |
 | HTTP 状态异常 | `response.raise_for_status()` 抛出的 `httpx.HTTPStatusError` 直接向外传播 |
 | 请求超时、连接失败等网络问题 | `httpx.RequestError` 及其子类直接向外传播，例如 `httpx.TimeoutException` |
-| 页面可获取，但关键内容未提取完整 | 返回 `ArticleResult`，由调用方检查 `is_valid` |
+| 页面可获取，但关键字段未提取完整 | 全文接口返回 `ArticleResult`，公众号接口返回 `AccountResult`，调用方可检查各自的 `is_valid` |
 
 ```python
 import httpx

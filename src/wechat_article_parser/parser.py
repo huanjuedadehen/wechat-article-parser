@@ -12,10 +12,10 @@ from dataclasses import replace
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import httpx
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, NavigableString, SoupStrainer, Tag
 from markdownify import MarkdownConverter
 
-from .models import AccountType, ArticleDisplayType, ArticleResult, ArticleURLType, WeChatVerifyError
+from .models import AccountResult, AccountType, ArticleDisplayType, ArticleResult, ArticleURLType, WeChatVerifyError
 
 _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -453,7 +453,7 @@ def _extract_cgi_string(scripts: list[Tag], field: str) -> str:
     return ""
 
 
-def _extract_account_type(script_text: str, result: ArticleResult) -> None:
+def _extract_account_type(script_text: str, result: AccountResult | ArticleResult) -> None:
     """从 new_service_type 中提取账号类型：0/1 → 订阅号，2 → 服务号。"""
     if result.mp_account_type:
         return
@@ -526,9 +526,29 @@ def _extract_text_page_strings(script_text: str) -> list[tuple[str, str]]:
     return results
 
 
-def _extract_rich_text_meta(script_text: str, result: ArticleResult) -> None:
-    """从富文本文章的 script 标签中提取元数据。"""
+def _set_account_id(result: AccountResult | ArticleResult, biz: str) -> None:
+    if biz:
+        result.mp_id_b64 = biz
+        try:
+            result.mp_id = int(base64.b64decode(biz).decode())
+        except ValueError:
+            pass
+
+
+def _rich_variables(script_text: str, fields: tuple[str, ...]) -> dict[str, str]:
+    variables: dict[str, str] = {}
+    for m in re.finditer(r"var\s+(\w+)\s*=\s*(.*?);", script_text):
+        if m[1] in fields:
+            literals = re.findall(r'"(.*?)"', m[2])
+            variables[m[1]] = next((s for s in literals if s.strip()), "")
+    return variables
+
+
+def _extract_rich_account(script_text: str, result: AccountResult | ArticleResult) -> None:
     _extract_account_type(script_text, result)
+
+    if "window.__allowLoadResFromMp" in script_text:
+        _set_account_id(result, _rich_variables(script_text, ("biz",)).get("biz", ""))
 
     if "var hd_head_img" in script_text:
         m = re.search(r'var hd_head_img = "([^"]+)"', script_text)
@@ -547,31 +567,24 @@ def _extract_rich_text_meta(script_text: str, result: ArticleResult) -> None:
         if m:
             result.mp_alias = m.group(1)
 
+
+def _extract_rich_text_meta(script_text: str, result: ArticleResult) -> None:
+    """从富文本文章的 script 标签中提取元数据。"""
+    _extract_rich_account(script_text, result)
+
     if "var oriCreateTime" in script_text:
         m = re.search(r"var oriCreateTime = '(\d+)'", script_text)
         if m:
             result.article_publish_time = int(m.group(1))
 
     if "window.__allowLoadResFromMp" in script_text:
-        variables: dict[str, str] = {}
-        for m in re.finditer(r"var\s+(\w+)\s*=\s*(.*?);", script_text):
-            literals = re.findall(r'"(.*?)"', m.group(2))
-            variables[m.group(1)] = next((s for s in literals if s.strip()), "")
-
-        biz = variables.get("biz", "")
-        if biz:
-            result.mp_id_b64 = biz
-            try:
-                result.mp_id = int(base64.b64decode(biz).decode())
-            except Exception:
-                pass
+        variables = _rich_variables(script_text, ("mid", "idx", "sn"))
         result.article_msg_id = int(variables["mid"]) if variables.get("mid") else 0
         result.article_idx = int(variables["idx"]) if variables.get("idx") else 0
         result.article_sn = variables.get("sn", "")
 
 
-def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
-    """从图片轮播 / 纯文本 / 视频分享页面的 script 标签中提取元数据。"""
+def _extract_swiper_account(script_text: str, result: AccountResult | ArticleResult) -> None:
     _extract_account_type(script_text, result)
 
     if "window.__initCgiDataConfig =" in script_text:
@@ -585,13 +598,18 @@ def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
 
         m = re.search(r"d\.biz.*?:\s*'([^']+)'", script_text)
         if m:
-            biz = m.group(1)
-            result.mp_id_b64 = biz
-            try:
-                result.mp_id = int(base64.b64decode(biz).decode())
-            except Exception:
-                pass
+            _set_account_id(result, m[1])
 
+    if "window.alias =" in script_text:
+        m = re.search(r'window.alias = "([^"]+)"', script_text)
+        if m:
+            result.mp_alias = m.group(1)
+
+
+def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
+    """从图片轮播 / 纯文本 / 视频分享页面的 script 标签中提取元数据。"""
+    _extract_swiper_account(script_text, result)
+    if "window.__initCgiDataConfig =" in script_text:
         m = re.search(r"d\.mid.*?:\s*'([^']+)'", script_text)
         if m:
             result.article_msg_id = int(m.group(1))
@@ -614,11 +632,6 @@ def _extract_swiper_meta(script_text: str, result: ArticleResult) -> None:
                 parts = m.group(1).split("/")
                 if len(parts) == 5 and len(parts[4]) == 22:
                     result.article_id = parts[4]
-
-    if "window.alias =" in script_text:
-        m = re.search(r'window.alias = "([^"]+)"', script_text)
-        if m:
-            result.mp_alias = m.group(1)
 
 
 # ---------------------------------------------------------------------------
@@ -1156,9 +1169,7 @@ def _try_content_branch(
     return candidate
 
 
-def _parse_html(url: str, html: str) -> ArticleResult:
-    """将原始 HTML 解析为 ArticleResult。"""
-    # 检测微信验证码/人机验证页面
+def _check_verify_page(url: str, html: str) -> None:
     if "secitptpage/template/verify.js" in html or "register_code" in html[:3000]:
         raise WeChatVerifyError(
             f"WeChat returned a verification page for {url}. "
@@ -1166,6 +1177,27 @@ def _parse_html(url: str, html: str) -> ArticleResult:
             "Try again later or use a different IP."
         )
 
+
+def _parse_account_html(url: str, html: str) -> AccountResult:
+    _check_verify_page(url, html)
+    # 只保留脚本节点，避免为正文、图片和 SVG 建树。
+    soup = BeautifulSoup(html, "html.parser", parse_only=SoupStrainer("script"))
+    scripts = [
+        script for script in soup.find_all("script")
+        if script.get("type", "").strip().lower() in ("", "text/javascript", "application/javascript")
+    ]
+    result = AccountResult(mp_user_name=_extract_user_name(scripts))
+    for script in scripts:
+        _extract_rich_account(script.text, result)
+    if not result.is_valid:
+        for script in scripts:
+            _extract_swiper_account(script.text, result)
+    return result
+
+
+def _parse_html(url: str, html: str) -> ArticleResult:
+    """将原始 HTML 解析为 ArticleResult。"""
+    _check_verify_page(url, html)
     result = ArticleResult()
     soup = BeautifulSoup(html, "html.parser")
 
@@ -1208,6 +1240,30 @@ def _parse_html(url: str, html: str) -> ArticleResult:
     return result
 
 
+def _fetch_html(url: str, timeout: int, user_agent: str | None, proxy: str | None) -> str:
+    with httpx.Client(
+        headers={"User-Agent": user_agent or _USER_AGENT},
+        timeout=timeout,
+        follow_redirects=True,
+        proxy=proxy,
+    ) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        return response.text
+
+
+async def _fetch_html_async(url: str, timeout: int, user_agent: str | None, proxy: str | None) -> str:
+    async with httpx.AsyncClient(
+        headers={"User-Agent": user_agent or _USER_AGENT},
+        timeout=timeout,
+        follow_redirects=True,
+        proxy=proxy,
+    ) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.text
+
+
 # ---------------------------------------------------------------------------
 # 公开接口
 # ---------------------------------------------------------------------------
@@ -1232,19 +1288,11 @@ def parse(
     Returns:
         包含解析数据的 ArticleResult。
     """
-    ua = user_agent or _USER_AGENT
-    with httpx.Client(
-        headers={"User-Agent": ua},
-        timeout=timeout,
-        follow_redirects=True,
-        proxy=proxy,
-    ) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        result = _parse_html(url, response.text)
-        if include_raw_html:
-            result.raw_html = response.text
-        return result
+    html = _fetch_html(url, timeout, user_agent, proxy)
+    result = _parse_html(url, html)
+    if include_raw_html:
+        result.raw_html = html
+    return result
 
 
 async def parse_async(
@@ -1267,16 +1315,32 @@ async def parse_async(
     Returns:
         包含解析数据的 ArticleResult。
     """
-    ua = user_agent or _USER_AGENT
-    async with httpx.AsyncClient(
-        headers={"User-Agent": ua},
-        timeout=timeout,
-        follow_redirects=True,
-        proxy=proxy,
-    ) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        result = _parse_html(url, response.text)
-        if include_raw_html:
-            result.raw_html = response.text
-        return result
+    html = await _fetch_html_async(url, timeout, user_agent, proxy)
+    result = _parse_html(url, html)
+    if include_raw_html:
+        result.raw_html = html
+    return result
+
+
+def parse_account(
+    url: str,
+    *,
+    timeout: int = _TIMEOUT,
+    user_agent: str | None = None,
+    proxy: str | None = None,
+) -> AccountResult:
+    """从微信公众号文章链接提取发布公众号的资料。"""
+    html = _fetch_html(url, timeout, user_agent, proxy)
+    return _parse_account_html(url, html)
+
+
+async def parse_account_async(
+    url: str,
+    *,
+    timeout: int = _TIMEOUT,
+    user_agent: str | None = None,
+    proxy: str | None = None,
+) -> AccountResult:
+    """异步抓取文章页面并提取发布公众号的资料。"""
+    html = await _fetch_html_async(url, timeout, user_agent, proxy)
+    return _parse_account_html(url, html)

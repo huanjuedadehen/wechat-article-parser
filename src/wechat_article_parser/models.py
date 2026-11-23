@@ -54,10 +54,7 @@ class ArticleDisplayType(str, Enum):
 
 
 @dataclass
-class ArticleResult:
-    """微信公众号文章的解析结果。"""
-
-    # 公众号信息
+class _AccountFields:
     mp_id_b64: str = ""
     mp_id: int = 0
     mp_name: str = ""
@@ -65,6 +62,23 @@ class ArticleResult:
     mp_image: str = ""
     mp_description: str = ""
     mp_account_type: AccountType = AccountType.UNKNOWN
+
+
+@dataclass
+class AccountResult(_AccountFields):
+    """文章发布公众号的资料。"""
+
+    mp_user_name: str = ""
+
+    @property
+    def is_valid(self) -> bool:
+        """是否取得公众号的数值 ID 和名称。"""
+        return bool(self.mp_id and self.mp_name)
+
+
+@dataclass
+class ArticleResult(_AccountFields):
+    """微信公众号文章的解析结果。"""
 
     # 文章信息
     article_id: str = ""

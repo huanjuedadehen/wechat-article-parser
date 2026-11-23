@@ -68,7 +68,7 @@ asyncio.run(main())
 
 ### 请求选项
 
-两个接口均支持以下关键字参数：
+`parse` 和 `parse_async` 均支持以下关键字参数：
 
 ```python
 from wechat_article_parser import parse
@@ -83,9 +83,21 @@ result = parse(
 print(result.raw_html)
 ```
 
+### 只取公众号资料
+
+创建或更新公众号时，可用文章链接直接提取发布账号的资料，跳过文章元数据、正文和图片处理。异步入口为 `parse_account_async`。
+
+```python
+from wechat_article_parser import parse_account
+
+account = parse_account("https://mp.weixin.qq.com/s/xxxxx")  # 替换为实际文章链接
+if account.is_valid:
+    print(account.mp_id, account.mp_name, account.mp_user_name)
+```
+
 ## 返回结果
 
-两个接口均返回 `ArticleResult` 数据类，常用字段如下：
+`parse` 和 `parse_async` 返回 `ArticleResult` 数据类，常用字段如下：
 
 | 字段 | 说明 |
 |---|---|
