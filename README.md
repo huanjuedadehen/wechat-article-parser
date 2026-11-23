@@ -1,6 +1,6 @@
 # wechat-article-parser
 
-微信公众号文章解析器。传入文章链接，提取公众号信息、文章元数据和 Markdown 正文，支持同步与异步调用。
+微信公众号文章解析器。传入文章链接，可以解析文章元数据和 Markdown 正文，也可以只获取发布公众号的资料。两种用法都支持同步与异步调用。
 
 > [!NOTE]
 > **短链接兼容说明：`is_valid` 允许 `article_sn` 为空。**
@@ -14,7 +14,7 @@
 - 提取标题、作者公众号、摘要、封面、发布时间、付费标记等信息，返回结构化数据。
 - 将正文转换为 Markdown，提取正文图片链接，支持 SVG 内嵌图片和文字。
 - 将投票、公众号推荐、小程序、红包封面等组件转换为可读文字或查看提示。
-- 支持请求超时、自定义 User-Agent、代理和按需返回原始 HTML。
+- 支持请求超时、自定义 User-Agent 和代理。全文解析还可按需返回原始 HTML。
 
 ## 安装
 
@@ -85,7 +85,7 @@ print(result.raw_html)
 
 ### 只取公众号资料
 
-创建或更新公众号时，可用文章链接直接提取发布账号的资料，跳过文章元数据、正文和图片处理。异步入口为 `parse_account_async`。
+创建或更新公众号时，可用文章链接直接提取发布账号的资料，跳过文章元数据、正文和图片处理。同步入口 `parse_account` 和异步入口 `parse_account_async` 均返回 `AccountResult`。[公众号接口与返回字段](docs/api.md#只解析公众号资料)
 
 ```python
 from wechat_article_parser import parse_account

@@ -22,13 +22,14 @@ Windows PowerShell 下使用 `.venv\Scripts\Activate.ps1` 激活虚拟环境。
 ```text
 src/wechat_article_parser/
 ├── __init__.py  # 公开接口和类型导出
-├── models.py    # ArticleResult、枚举和异常
+├── models.py    # ArticleResult、AccountResult、枚举和异常
 └── parser.py    # HTTP 抓取、页面提取与 Markdown 转换
 tests/          # 离线回归用例与真实链接集成测试
 docs/           # API、转换规则和开发说明
 ```
 
-`parse()` 和 `parse_async()` 共用 `_parse_html()`。
+`parse()` 和 `parse_async()` 通过 `_parse_html()` 解析全文。
+`parse_account()` 和 `parse_account_async()` 通过 `_parse_account_html()` 从脚本提取发布公众号的资料。两组接口复用 HTTP 抓取和验证码检测逻辑。
 修改模板或组件行为前，可先阅读[正文转换规则](content-rules.md)；公开字段约定见 [API 参考](api.md)。
 
 ## 离线回归测试
@@ -40,7 +41,8 @@ python -m pytest tests --ignore=tests/test_parser.py -q
 ```
 
 功能用例分布在 `tests/test_*_content.py`、`test_markdown.py`、`test_type_routing.py`、
-`test_models.py`、`test_user_name.py` 等文件中。异步测试使用 `@pytest.mark.asyncio`，
+`test_models.py`、`test_user_name.py` 等文件中。`tests/test_account.py` 覆盖公众号资料提取、同步和异步入口、重定向及异常。
+使用 `pytest-asyncio` 的异步测试可加 `@pytest.mark.asyncio`，
 项目已配置 `asyncio_mode = "auto"`。
 
 ## 真实链接集成测试

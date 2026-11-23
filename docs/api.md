@@ -4,7 +4,9 @@
 
 ## 解析接口
 
-以下接口和类型均可从 `wechat_article_parser` 顶层导入。
+以下接口和类型均可从 `wechat_article_parser` 顶层导入。示例中的 `https://mp.weixin.qq.com/s/xxxxx` 请替换为实际文章链接。
+
+### 解析全文
 
 ```python
 from wechat_article_parser import ArticleResult
@@ -80,12 +82,12 @@ async def parse_account_async(
 传入任一公众号文章链接，网络选项和异常行为与全文接口相同。仍需下载文章 HTML，本地只保留脚本节点，跳过文章元数据、正文 Markdown 和图片提取。
 优先读取图文页面的账号资料，数值 ID 或名称缺失时再读取分享页面的账号配置。
 
-`AccountResult` 只包含下表中的八个 `mp_` 字段，类型、含义和默认值见[返回结果](#返回结果)。
-取得 `mp_id` 和 `mp_name` 时，计算属性 `account.is_valid` 为 `True`。资料不完整时仍返回已取得的字段。
+八个 `mp_` 字段和计算属性 `is_valid` 都可以直接通过 `account.属性名` 读取。
+当 `mp_id` 非零且 `mp_name` 非空时，`account.is_valid` 为 `True`。资料不完整时仍返回已取得的字段。[字段类型与默认值](#返回结果)
 
 ## 链接识别
 
-同步和异步接口均支持短链接 `/s/<22位文章ID>`（ID 由英文字母、数字、`_` 或 `-` 组成）和长链接 `/s?__biz=...&mid=...&idx=...&sn=...&chksm=...`。
+四个接口均可接收短链接和长链接。全文接口会额外填写 `article_url_type`，支持识别短链接 `/s/<22位文章ID>`（ID 由英文字母、数字、`_` 或 `-` 组成）和长链接 `/s?__biz=...&mid=...&idx=...&sn=...&chksm=...`。
 根据原始输入 URL 识别链接类型：协议须为 HTTP/HTTPS，域名须为 `mp.weixin.qq.com`，且不能包含 URL 用户名或密码。
 长链接路径须为 `/s`，且 `__biz`、`mid`、`idx`、`sn`、`chksm` 五个查询参数必须都存在且有值，
 空字符串或纯空白不算有效值；重复参数中的每个值也须非空白。额外查询参数和片段不影响识别。
@@ -153,7 +155,7 @@ data["is_valid"] = result.is_valid
 print(json.dumps(data, ensure_ascii=False, indent=2))
 ```
 
-`is_valid` 是计算属性，**不包含在 `asdict(result)` 中**，需要时自行加入。
+两种结果都可以按上例序列化。`asdict(account)` 生成包含八个 `mp_` 键的字典，执行 `data["is_valid"] = account.is_valid` 后即可输出九个平级键。
 三个枚举均继承自 `str`，JSON 中直接输出字符串值。
 
 ## 判断是否为付费文章
@@ -204,9 +206,9 @@ print(result.article_item_show_type)  # 例如 5
 `AccountType` 继承自 `str` 枚举，既支持枚举比较，也支持与中文字符串直接比较：
 
 ```python
-from wechat_article_parser import parse, AccountType
+from wechat_article_parser import AccountType, parse_account
 
-result = parse("https://mp.weixin.qq.com/s/xxxxx")
+result = parse_account("https://mp.weixin.qq.com/s/xxxxx")
 
 # 推荐：枚举比较（有类型提示与 IDE 补全）
 if result.mp_account_type == AccountType.SERVICE:
