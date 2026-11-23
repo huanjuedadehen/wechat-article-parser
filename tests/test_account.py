@@ -58,6 +58,7 @@ def test_rich_account_skips_article_fields_and_body(monkeypatch) -> None:
         "mp_id_b64": "MTIz", "mp_id": 123, "mp_name": "图文账号", "mp_alias": "alias",
         "mp_image": "https://example.com/avatar", "mp_description": "简介",
         "mp_account_type": AccountType.SERVICE, "mp_user_name": "gh_publisher",
+        "html_download_bytes": 0, "html_download_seconds": 0.0, "parse_seconds": 0.0,
     }
 
 

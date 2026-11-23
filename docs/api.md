@@ -82,7 +82,7 @@ async def parse_account_async(
 传入任一公众号文章链接，网络选项和异常行为与全文接口相同。仍需下载文章 HTML，本地只保留脚本节点，跳过文章元数据、正文 Markdown 和图片提取。
 优先读取图文页面的账号资料，数值 ID 或名称缺失时再读取分享页面的账号配置。
 
-八个 `mp_` 字段和计算属性 `is_valid` 都可以直接通过 `account.属性名` 读取。
+八个 `mp_` 字段、三个下载与解析指标和计算属性 `is_valid` 都可以直接通过 `account.属性名` 读取。
 当 `mp_id` 非零且 `mp_name` 非空时，`account.is_valid` 为 `True`。资料不完整时仍返回已取得的字段。[字段类型与默认值](#返回结果)
 
 ## 链接识别
@@ -128,7 +128,12 @@ async def parse_account_async(
 | `article_item_show_type` | `int \| None` | 微信页面中的原始展示类型：`0` 图文、`5` 视频、`7` 音频、`8` 图片轮播、`10` 文字；其他已提取的数值原样保留，缺失或无法解析时为 `None` |
 | `raw_html` | `str` | 原始 HTML 网页源代码（仅在 `include_raw_html=True` 时填充，否则为空字符串） |
 | `images` | `list[str]` | 最终保留的正文图片链接，按顺序去重；不包含被省略的动画帧、小程序封面和头像、红包封面预览图 |
+| `html_download_bytes` | `int` | 最终 HTML 响应体实际传输的字节数。压缩响应按压缩后的大小计，仅统计响应体，排除响应头和中间重定向响应体 |
+| `html_download_seconds` | `float` | 发起 GET 请求到最终 HTML 解码为文本的实际经过时间，单位秒，包含重定向、读取和解压 |
+| `parse_seconds` | `float` | 本地解析函数从开始处理已解码的 HTML 到返回结果的实际经过时间，单位秒 |
 | `is_valid` | `bool` | 关键字段是否全部解析成功（属性） |
+
+四个公开入口都填充这三个指标，包括成功返回部分字段、`is_valid` 为 `False` 的情况。手动创建结果对象时，下载字节数和两个用时默认分别为 `0`、`0.0`、`0.0`。
 
 `is_valid` 为 `True` 的条件：`mp_id`、`mp_name`、`article_msg_id`、`article_idx`、`article_title`、`article_publish_time` 均不为空/零，且 `article_markdown` 非空或 `article_display_type in ("video", "audio")`。
 `article_sn` 为非必需字段，页面未提供签名时仍可返回有效结果；这不改变输入长链接的参数要求，详见[链接识别](#链接识别)。
@@ -155,7 +160,7 @@ data["is_valid"] = result.is_valid
 print(json.dumps(data, ensure_ascii=False, indent=2))
 ```
 
-两种结果都可以按上例序列化。`asdict(account)` 生成包含八个 `mp_` 键的字典，执行 `data["is_valid"] = account.is_valid` 后即可输出九个平级键。
+两种结果都可以按上例序列化。`asdict(account)` 包含八个公众号字段和三个统计字段，再加入计算属性 `is_valid` 即可输出十二个平级键。
 三个枚举均继承自 `str`，JSON 中直接输出字符串值。
 
 ## 判断是否为付费文章

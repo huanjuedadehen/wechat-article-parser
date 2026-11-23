@@ -54,7 +54,7 @@ class ArticleDisplayType(str, Enum):
 
 
 @dataclass
-class _AccountFields:
+class _ResultFields:
     mp_id_b64: str = ""
     mp_id: int = 0
     mp_name: str = ""
@@ -63,9 +63,14 @@ class _AccountFields:
     mp_description: str = ""
     mp_account_type: AccountType = AccountType.UNKNOWN
 
+    # 单次请求的统计信息通过关键字传入，不参与解析内容的相等比较。
+    html_download_bytes: int = field(default=0, kw_only=True, compare=False)
+    html_download_seconds: float = field(default=0.0, kw_only=True, compare=False)
+    parse_seconds: float = field(default=0.0, kw_only=True, compare=False)
+
 
 @dataclass
-class AccountResult(_AccountFields):
+class AccountResult(_ResultFields):
     """文章发布公众号的资料。"""
 
     mp_user_name: str = ""
@@ -77,7 +82,7 @@ class AccountResult(_AccountFields):
 
 
 @dataclass
-class ArticleResult(_AccountFields):
+class ArticleResult(_ResultFields):
     """微信公众号文章的解析结果。"""
 
     # 文章信息

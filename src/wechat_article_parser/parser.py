@@ -8,7 +8,10 @@ import json
 import math
 import re
 from collections import deque
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from time import perf_counter
+from typing import TypeVar
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import httpx
@@ -1240,28 +1243,54 @@ def _parse_html(url: str, html: str) -> ArticleResult:
     return result
 
 
-def _fetch_html(url: str, timeout: int, user_agent: str | None, proxy: str | None) -> str:
+_ResultT = TypeVar("_ResultT", ArticleResult, AccountResult)
+
+
+@dataclass
+class _DownloadedHTML:
+    text: str
+    size_bytes: int
+    download_seconds: float
+
+    @classmethod
+    def from_response(cls, response: httpx.Response, started: float) -> _DownloadedHTML:
+        response.raise_for_status()
+        text = response.text
+        return cls(text, response.num_bytes_downloaded, perf_counter() - started)
+
+    def parse(self, url: str, parse_html: Callable[[str, str], _ResultT]) -> _ResultT:
+        started = perf_counter()
+        result = parse_html(url, self.text)
+        result.parse_seconds = perf_counter() - started
+        result.html_download_bytes = self.size_bytes
+        result.html_download_seconds = self.download_seconds
+        return result
+
+
+def _fetch_html(url: str, timeout: int, user_agent: str | None, proxy: str | None) -> _DownloadedHTML:
     with httpx.Client(
         headers={"User-Agent": user_agent or _USER_AGENT},
         timeout=timeout,
         follow_redirects=True,
         proxy=proxy,
     ) as client:
+        started = perf_counter()
         response = client.get(url)
-        response.raise_for_status()
-        return response.text
+        return _DownloadedHTML.from_response(response, started)
 
 
-async def _fetch_html_async(url: str, timeout: int, user_agent: str | None, proxy: str | None) -> str:
+async def _fetch_html_async(
+    url: str, timeout: int, user_agent: str | None, proxy: str | None,
+) -> _DownloadedHTML:
     async with httpx.AsyncClient(
         headers={"User-Agent": user_agent or _USER_AGENT},
         timeout=timeout,
         follow_redirects=True,
         proxy=proxy,
     ) as client:
+        started = perf_counter()
         response = await client.get(url)
-        response.raise_for_status()
-        return response.text
+        return _DownloadedHTML.from_response(response, started)
 
 
 # ---------------------------------------------------------------------------
@@ -1288,10 +1317,10 @@ def parse(
     Returns:
         包含解析数据的 ArticleResult。
     """
-    html = _fetch_html(url, timeout, user_agent, proxy)
-    result = _parse_html(url, html)
+    page = _fetch_html(url, timeout, user_agent, proxy)
+    result = page.parse(url, _parse_html)
     if include_raw_html:
-        result.raw_html = html
+        result.raw_html = page.text
     return result
 
 
@@ -1315,10 +1344,10 @@ async def parse_async(
     Returns:
         包含解析数据的 ArticleResult。
     """
-    html = await _fetch_html_async(url, timeout, user_agent, proxy)
-    result = _parse_html(url, html)
+    page = await _fetch_html_async(url, timeout, user_agent, proxy)
+    result = page.parse(url, _parse_html)
     if include_raw_html:
-        result.raw_html = html
+        result.raw_html = page.text
     return result
 
 
@@ -1330,8 +1359,8 @@ def parse_account(
     proxy: str | None = None,
 ) -> AccountResult:
     """从微信公众号文章链接提取发布公众号的资料。"""
-    html = _fetch_html(url, timeout, user_agent, proxy)
-    return _parse_account_html(url, html)
+    page = _fetch_html(url, timeout, user_agent, proxy)
+    return page.parse(url, _parse_account_html)
 
 
 async def parse_account_async(
@@ -1342,5 +1371,5 @@ async def parse_account_async(
     proxy: str | None = None,
 ) -> AccountResult:
     """异步抓取文章页面并提取发布公众号的资料。"""
-    html = await _fetch_html_async(url, timeout, user_agent, proxy)
-    return _parse_account_html(url, html)
+    page = await _fetch_html_async(url, timeout, user_agent, proxy)
+    return page.parse(url, _parse_account_html)

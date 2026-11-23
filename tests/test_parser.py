@@ -172,6 +172,9 @@ def test_fetch_all(url: str, proxy: str | None) -> None:
     for i, img in enumerate(result.images, 1):
         print(f"  {i}. {img}")
     print(f"Markdown内容:\n{result.article_markdown}")
+    print(f"HTML 下载大小: {result.html_download_bytes} 字节")
+    print(f"HTML 下载用时: {result.html_download_seconds:.3f} 秒")
+    print(f"解析用时:      {result.parse_seconds:.3f} 秒")
     print(f"有效性:       {result.is_valid}")
     print(f"{'='*60}")
 

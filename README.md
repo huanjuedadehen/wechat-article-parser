@@ -111,6 +111,8 @@ if account.is_valid:
 | `article_is_paid` | 是否检测到付费标记 |
 | `is_valid` | 关键字段是否完整的计算属性 |
 
+全文和公众号资料接口均返回三个平级字段，分别为 HTML 响应体的下载字节数 `html_download_bytes`、下载秒数 `html_download_seconds` 和本地解析秒数 `parse_seconds`。
+
 完整字段、枚举、长链接识别条件及 JSON 序列化示例见 [API 参考](docs/api.md)。
 
 ## 使用边界与错误处理
