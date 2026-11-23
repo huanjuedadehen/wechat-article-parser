@@ -2,6 +2,7 @@
 
 from dataclasses import asdict
 import json
+import tracemalloc
 
 import pytest
 from bs4 import BeautifulSoup
@@ -93,6 +94,42 @@ def test_ignore_type_in_references_strings_comments_and_local_variables(
 
     expected = 8 if current_assignment else None
     assert parser._extract_item_show_type(soup.find_all("script")) == expected
+
+
+@pytest.mark.parametrize("quote", ["'", '"', "`"])
+def test_long_script_string_before_global_assignments(quote: str) -> None:
+    # 转义的引号和换行仍在字符串内，末尾的一对反斜杠则允许引号结束字符串。
+    inner_quote = '"' if quote == "'" else "'"
+    payload = "正文" * 65536 + "\\" + quote + "\\\n"
+    payload += f"var user_name = {inner_quote}fake{inner_quote}; window.item_show_type = 8;" + "\\\\"
+    script = (
+        f"var payload = {quote}{payload}{quote};\n"
+        "var user_name /* 账号 */ = 'actual';\n"
+        "window.item_show_type // 类型\n = 0;"
+    )
+    result = parser._parse_html(_URL, _html(_RICH_TEXT, script))
+
+    assert result.mp_user_name == "actual"
+    assert result.article_item_show_type == 0
+    assert result.article_markdown == "富文本正文"
+
+
+def test_large_string_token_memory() -> None:
+    # 仅测已构造字面量的匹配开销，旧正则对这段输入需要约 20 MiB 的临时空间。
+    literal = '"' + "正文" * 65536 + r'\"末尾"'
+    tracing = tracemalloc.is_tracing()
+    if not tracing:
+        tracemalloc.start()
+    try:
+        baseline, previous_peak = tracemalloc.get_traced_memory()
+        match = parser._JS_DATA_TOKEN_RE.fullmatch(literal)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        if not tracing:
+            tracemalloc.stop()
+
+    assert match and match.lastgroup == "string"
+    assert peak <= max(previous_peak, baseline + 4 * 1024 * 1024)
 
 
 @pytest.mark.parametrize(

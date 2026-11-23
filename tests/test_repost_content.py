@@ -109,12 +109,13 @@ def test_static_notice_without_script_body_still_parses() -> None:
     assert result.images == []
 
 
-def test_legacy_script_notice_keeps_body_and_newlines() -> None:
-    notice = r'<script>notice.innerHTML = "旧版附言\x0a第二行";</script>'
+@pytest.mark.parametrize("quote", ["'", '"'])
+def test_legacy_script_notice_keeps_escaped_quotes_and_newlines(quote: str) -> None:
+    notice = rf"<script>notice.innerHTML = {quote}旧版附言\{quote}原文\{quote}\x0a第二行{quote};</script>"
     result = _parse_html(_URL, _html(notice=notice))
 
     assert result.is_valid
-    assert result.article_markdown == f"旧版附言  \n第二行\n\n[查看原文]({_SOURCE})"
+    assert result.article_markdown == f"旧版附言{quote}原文{quote}  \n第二行\n\n[查看原文]({_SOURCE})"
 
 
 def test_empty_unencoded_body_falls_back_to_content() -> None:

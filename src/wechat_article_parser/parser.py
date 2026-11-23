@@ -24,9 +24,14 @@ _USER_AGENT = (
 )
 _TIMEOUT = 15
 
-# 将字符串和注释作为整体，避免其中的括号干扰图片数组的层级判断。
+# 连续的普通字符一次匹配，避免长字符串让正则引擎为每个字符保存回溯状态。
+_JS_QUOTED_STRING = (
+    r"'[^'\\]*(?:\\[\s\S][^'\\]*)*'"
+    r'|"[^"\\]*(?:\\[\s\S][^"\\]*)*"'
+)
+# 将字符串和注释作为整体，避免其中的括号干扰脚本结构判断。
 _JS_DATA_TOKEN_RE = re.compile(
-    r"(?P<string>'(?:\\[\s\S]|[^'\\])*'|\"(?:\\[\s\S]|[^\"\\])*\"|`(?:\\[\s\S]|[^`\\])*`)"
+    rf"(?P<string>{_JS_QUOTED_STRING}|`[^`\\]*(?:\\[\s\S][^`\\]*)*`)"
     r"|(?P<comment>//[^\r\n]*|/\*[\s\S]*?\*/)"
     r"|[a-zA-Z_$][\w$]*|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|[^\s]"
 )
@@ -272,7 +277,8 @@ def _extract_meta(soup: BeautifulSoup, result: ArticleResult) -> None:
 def _extract_item_show_type(scripts: list[Tag]) -> int | None:
     """只读取当前文章的全局类型赋值；0 是有效类型，缺失时返回 None。"""
     for script in scripts:
-        if "item_show_type" not in script.text:
+        # 跳过仅引用字段的大脚本，字段和等号之间也可能有 JS 注释。
+        if not re.search(r"item_show_type\s*[=/]", script.text):
             continue
         history: deque[str] = deque(maxlen=5)
         brace_depth = 0
@@ -371,7 +377,7 @@ def _extract_user_name(scripts: list[Tag]) -> str:
     使用词法标记跳过注释和字符串，不执行页面脚本。
     """
     for script in scripts:
-        if "user_name" not in script.text:
+        if not re.search(r"user_name\s*[=/]", script.text):
             continue
         history: deque[str] = deque(maxlen=4)
         brace_depth = 0
@@ -973,10 +979,7 @@ def _extract_repost_content(
     parts: list[str] = []
     notice = soup.find("p", id="js_share_notice")
     if notice:
-        m = re.search(
-            r'''innerHTML\s*=\s*("(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')''',
-            str(notice),
-        )
+        m = re.search(rf"innerHTML\s*=\s*({_JS_QUOTED_STRING})", str(notice))
         if m:
             text = _decode_text(_decode_js_string(m[1][1:-1]), preserve_newlines=True)
             notice_markdown = _to_markdown_plain(f"<p>{text}</p>")
